@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>عملیات ایمیل اعتراضی - انقلاب ملی ۱۴۰۴</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 24px;
+            color: #ffd700;
+        }
+
+        .subtitle {
+            text-align: center;
+            margin-bottom: 30px;
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .campaign-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .campaign-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .campaign-title {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #ffd700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .campaign-description {
+            margin-bottom: 15px;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+
+        .campaign-target {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .email-button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+        }
+
+        .email-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .stats {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+        }
+
+        .stat-item {
+            display: inline-block;
+            margin: 0 20px;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .flag {
+            font-size: 24px;
+        }
+
+        .icon {
+            font-size: 24px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            opacity: 0.7;
+            font-size: 12px;
+        }
+
+        .warning {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid rgba(255, 193, 7, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦁☀️ عملیات ایمیل اعتراضی 🦁☀️</h1>
+        <p class="subtitle">انقلاب ملی ۱۴۰۴ - ارتش دیجیتال</p>
+
+        <div class="warning">
+            ⚠️ هر ایمیل ارسالی = 10 امتیاز | محتوای ایمیل‌ها به زبان انگلیسی است
+        </div>
+
+        <!-- UN R2P Campaign -->
+        <div class="campaign-card">
+            <div class="campaign-title">
+                <span class="icon">🆘</span>
+                <span>درخواست اعمال R2P از سازمان ملل</span>
+            </div>
+            <div class="campaign-description">
+                درخواست اعمال اصل "مسئولیت حمایت" (Responsibility to Protect) برای جلوگیری از کشتار مردم ایران
+            </div>
+            <div class="campaign-target">
+                📧 مخاطبان: سازمان ملل، کمیساریای عالی حقوق بشر
+            </div>
+            <a href="#" class="email-button" onclick="sendEmail('un_r2p'); return false;">
+                ارسال ایمیل به سازمان ملل
+            </a>
+        </div>
+
+        <!-- Military Aid Campaign -->
+        <div class="campaign-card">
+            <div class="campaign-title">
+                <span class="icon">🛡️</span>
+                <span>درخواست کمک نظامی</span>
+            </div>
+            <div class="campaign-description">
+                درخواست کمک نظامی و لجستیک به انقلاب ملی ایران از کشورهای دموکراتیک
+            </div>
+            <div class="campaign-target">
+                📧 مخاطبان: وزارت خارجه آمریکا، پارلمان اروپا
+            </div>
+            <a href="#" class="email-button" onclick="sendEmail('military_aid'); return false;">
+                ارسال درخواست کمک نظامی
+            </a>
+        </div>
+
+        <!-- Recognize Pahlavi Campaign -->
+        <div class="campaign-card">
+            <div class="campaign-title">
+                <span class="icon">👑</span>
+                <span>به رسمیت شناختن شاهزاده رضا پهلوی</span>
+            </div>
+            <div class="campaign-description">
+                درخواست به رسمیت شناختن شاهزاده رضا پهلوی به عنوان رهبر مشروع مردم ایران
+            </div>
+            <div class="campaign-target">
+                📧 مخاطبان: سیاستگذاران بین‌المللی، پارلمان‌ها
+            </div>
+            <a href="#" class="email-button" onclick="sendEmail('recognize_pahlavi'); return false;">
+                ارسال درخواست به رسمیت شناختن
+            </a>
+        </div>
+
+        <!-- Media Campaign -->
+        <div class="campaign-card">
+            <div class="campaign-title">
+                <span class="icon">📺</span>
+                <span>ارسال به رسانه‌های بین‌المللی</span>
+            </div>
+            <div class="campaign-description">
+                اطلاع‌رسانی به رسانه‌های بزرگ جهان درباره جنایات رژیم و انقلاب ملی
+            </div>
+            <div class="campaign-target">
+                📧 مخاطبان: BBC, CNN, Reuters, France24
+            </div>
+            <a href="#" class="email-button" onclick="sendEmail('media'); return false;">
+                ارسال به رسانه‌ها
+            </a>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number" id="emailsSent">0</div>
+                <div class="stat-label">ایمیل ارسالی</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="pointsEarned">0</div>
+                <div class="stat-label">امتیاز کسب شده</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            💪 با هم برای آزادی ایران | انقلاب ملی ۱۴۰۴ 🦁☀️
+        </div>
+    </div>
+
+    <script>
+        // Email templates
+        const emailTemplates = {
+            un_r2p: {
+                subject: "URGENT: Invoke R2P for Iran - Executions Continue",
+                recipients: ["contact@un.org", "inquiries@ohchr.org"],
+                body: `Dear UN Officials,
+
+I am writing to urgently request the invocation of the Responsibility to Protect (R2P) doctrine for the people of Iran.
+
+The Iranian regime continues its brutal crackdown on peaceful protesters, with daily executions, torture, and systematic human rights violations. The National Revolution of 1404 represents the Iranian people's legitimate demand for freedom and democracy.
+
+I urge the United Nations to:
+1. Invoke R2P to protect Iranian civilians
+2. Impose comprehensive sanctions on regime officials
+3. Establish a no-fly zone
+4. Provide humanitarian aid to protesters
+
+Time is running out. The world cannot remain silent.
+
+Respectfully,
+A concerned global citizen supporting the Iranian National Revolution
+
+#NationalRevolution1404 #RezaPahlavi #Iran`
+            },
+            
+            military_aid: {
+                subject: "Support Iranian National Revolution - Military Aid Needed",
+                recipients: ["contact@state.gov", "info@europarl.europa.eu"],
+                body: `Dear Representatives,
+
+I am writing to request immediate military and logistical support for the Iranian National Revolution of 1404, led by Prince Reza Pahlavi.
+
+The Iranian people are fighting for their freedom against a brutal theocratic regime. They need:
+- Intelligence support
+- Communication equipment
+- Defensive military aid
+- Recognition of Prince Reza Pahlavi as the legitimate leader
+
+Supporting this revolution is in the strategic interest of democracy and stability in the Middle East.
+
+Please act now.
+
+Sincerely,
+A supporter of Iranian freedom
+
+#NationalRevolution1404 #RezaPahlavi`
+            },
+            
+            recognize_pahlavi: {
+                subject: "Recognize Prince Reza Pahlavi as Iran's Legitimate Leader",
+                recipients: ["contact@state.gov", "info@europarl.europa.eu"],
+                body: `Dear Policy Makers,
+
+I urge you to formally recognize Prince Reza Pahlavi as the legitimate representative of the Iranian people in their struggle for freedom.
+
+Prince Pahlavi has demonstrated:
+- Commitment to democratic values
+- Support for human rights
+- Vision for a free, secular Iran
+- International diplomatic experience
+
+Recognizing his leadership will provide legitimacy and structure to the National Revolution of 1404.
+
+The Iranian people deserve your support.
+
+Best regards,
+A global advocate for Iranian freedom
+
+#NationalRevolution1404 #RezaPahlavi #FreeIran`
+            },
+            
+            media: {
+                subject: "URGENT: Cover the Iranian National Revolution of 1404",
+                recipients: ["newstips@bbc.com", "tips@cnn.com", "tips@reuters.com"],
+                body: `Dear News Desk,
+
+I am writing to urge your organization to provide comprehensive coverage of the Iranian National Revolution of 1404.
+
+Key Facts:
+- Millions of Iranians are demanding freedom and democracy
+- Prince Reza Pahlavi has emerged as a unifying leader
+- Daily executions and human rights violations continue
+- International support is critical
+
+This is a historic moment that deserves global attention. The Iranian people need the world to witness their struggle.
+
+Please consider:
+- Special coverage and documentaries
+- Interviews with Prince Reza Pahlavi and opposition leaders
+- Investigation into regime atrocities
+- Analysis of geopolitical implications
+
+Thank you for your attention to this crucial matter.
+
+Sincerely,
+A concerned citizen
+
+#NationalRevolution1404 #RezaPahlavi #Iran`
+            }
+        };
+
+        let emailCount = 0;
+        let totalPoints = 0;
+
+        function sendEmail(campaignType) {
+            const template = emailTemplates[campaignType];
+            
+            if (!template) {
+                alert('خطا: قالب ایمیل پیدا نشد');
+                return;
+            }
+
+            // Create mailto link
+            const mailtoLink = `mailto:${template.recipients.join(',')}?subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`;
+            
+            // Open email client
+            window.location.href = mailtoLink;
+            
+            // Update stats
+            emailCount++;
+            totalPoints += 10;
+            
+            document.getElementById('emailsSent').textContent = emailCount;
+            document.getElementById('pointsEarned').textContent = totalPoints;
+            
+            // Notify Telegram bot (if available)
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.sendData(JSON.stringify({
+                    action: 'email_sent',
+                    campaign: campaignType,
+                    points: 10
+                }));
+            }
+            
+            // Show confirmation
+            setTimeout(() => {
+                alert('✅ ایمیل باز شد! پس از ارسال، به بات برگردید تا امتیاز دریافت کنید.');
+            }, 500);
+        }
+
+        // Initialize Telegram WebApp
+        if (window.Telegram && window.Telegram.WebApp) {
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+            
+            // Set theme colors
+            document.body.style.background = tg.backgroundColor || document.body.style.background;
+        }
+
+        // Track page visibility for analytics
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                // User switched to email client (hopefully)
+                console.log('User likely opened email client');
+            }
+        });
+    </script>
+</body>
+</html>

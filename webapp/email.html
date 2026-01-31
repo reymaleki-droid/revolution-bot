@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>باز کردن ایمیل...</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 500px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #ffd700;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #ffd700;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        p {
+            opacity: 0.9;
+            line-height: 1.6;
+            margin-top: 20px;
+        }
+        .note {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦁☀️ انقلاب ملی ۱۴۰۴</h1>
+        <div class="spinner"></div>
+        <h2>در حال باز کردن برنامه ایمیل...</h2>
+        <p>لطفاً چند ثانیه صبر کنید</p>
+        <div class="note">
+            <strong>توجه:</strong> اگر برنامه ایمیل شما باز نشد، لطفاً از مرورگر خود اجازه دهید تا لینک‌های mailto را باز کند.
+        </div>
+    </div>
+    <script>
+        // Get URL parameters
+        const params = new URLSearchParams(window.location.search);
+        const recipient = params.get('to');
+        const subject = params.get('subject');
+        const body = params.get('body');
+        
+        // Create mailto URL
+        if (recipient && subject && body) {
+            const mailtoUrl = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            
+            // Redirect to mailto after a short delay
+            setTimeout(() => {
+                window.location.href = mailtoUrl;
+            }, 500);
+            
+            // Show helpful message after attempt
+            setTimeout(() => {
+                document.querySelector('.note').innerHTML = `
+                    <strong>✅ درخواست ارسال شد!</strong><br>
+                    اگر برنامه ایمیل باز نشد، این اطلاعات را به صورت دستی کپی کنید:<br><br>
+                    <strong>گیرنده:</strong> ${recipient}<br>
+                    <strong>موضوع:</strong> ${decodeURIComponent(subject)}<br><br>
+                    <button onclick="window.close()" style="background: #ffd700; color: #1e3c72; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px;">بستن صفحه</button>
+                `;
+            }, 2000);
+        } else {
+            document.body.innerHTML = `
+                <div class="container">
+                    <h1>❌ خطا</h1>
+                    <p>اطلاعات ایمیل ناقص است. لطفاً دوباره از ربات تلگرام امتحان کنید.</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

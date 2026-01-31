@@ -1,0 +1,25 @@
+﻿# Runtime files
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+
+# Sensitive files - NEVER COMMIT
+.env
+*.salt
+user_hash.salt
+*.db
+revolution_bot*.db
+secure_bot.db
+
+# Generated content
+certificates/
+badges/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
