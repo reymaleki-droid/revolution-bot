@@ -24,7 +24,7 @@ flask-cors>=4.0.0
 
 # Security
 cryptography>=42.0.0
-pysqlcipher3>=1.2.0
+# pysqlcipher3>=1.2.0  # Removed: requires sqlcipher system library
 python-dotenv>=1.0.0
 
 # Utilities
