@@ -2034,8 +2034,7 @@ async def handle_security_info(
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     """Log errors (anonymized)"""
     logger.error(
-        f"Exception while handling an update: {
-            context.error}",
+        f"Exception while handling an update: {context.error}",
         exc_info=context.error)
 
 
