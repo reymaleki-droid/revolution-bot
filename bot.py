@@ -21,8 +21,8 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from concurrent.futures import ThreadPoolExecutor
 
-from database import Database
 from secure_database import SecureDatabase
 from utils import MediaSecurity, Spintax, ConduitHelper, TextFormatter, validate_environment
 from config import (
@@ -47,13 +47,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize database (secure or legacy)
-if USE_SECURE_DATABASE:
-    db = SecureDatabase()
-    logger.info("✅ Running with SECURE zero-knowledge database")
-else:
-    db = Database()
-    logger.warning("⚠️ Running with legacy database (not secure)")
+# SEC: Concurrency limiters for resource-intensive operations
+SEC_OCR_SEM = asyncio.Semaphore(2)      # Max 2 concurrent OCR jobs
+SEC_FFMPEG_SEM = asyncio.Semaphore(1)   # Max 1 concurrent ffmpeg job
+
+# SEC: File size limits (enforce BEFORE download)
+MAX_PHOTO_SIZE = 10 * 1024 * 1024   # 10 MB
+MAX_VIDEO_SIZE = 50 * 1024 * 1024   # 50 MB
+
+# SEC: OCR timeout executor
+_ocr_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ocr")
+
+# SEC-001: Fail-closed - require secure database in production
+if not USE_SECURE_DATABASE:
+    raise RuntimeError(
+        "CRITICAL: USE_SECURE_DATABASE must be 'true' in production.\n"
+        "Legacy database stores PII and is not permitted."
+    )
+
+db = SecureDatabase()
+logger.info("✅ Running with SECURE zero-knowledge database")
 
 
 async def send_certificate_notification(update: Update, certificate_data: Dict):
@@ -674,9 +687,22 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['awaiting_media'] = False
         return
 
+    # SEC-003: Initialize paths before try for cleanup in finally
+    input_path = None
+    output_path = None
     try:
         # Download video
         video = update.message.video
+        
+        # SEC-005: Check file size BEFORE download
+        if video.file_size and video.file_size > MAX_VIDEO_SIZE:
+            await update.message.reply_text(
+                f"❌ حجم ویدیو بیش از حد مجاز است ({MAX_VIDEO_SIZE // (1024*1024)} MB)",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data['awaiting_media'] = False
+            return
+        
         file = await context.bot.get_file(video.file_id)
 
         # Create temp files
@@ -684,9 +710,11 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             input_path = tmp_input.name
             await file.download_to_drive(input_path)
 
-        # Strip metadata
+        # Strip metadata with concurrency limit
         output_path = input_path.replace('.mp4', '_clean.mp4')
-        MediaSecurity.strip_metadata(input_path, output_path)
+        async with SEC_FFMPEG_SEM:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, MediaSecurity.strip_metadata, input_path, output_path)
 
         # Award points
         if USE_SECURE_DATABASE:
@@ -714,21 +742,24 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown'
             )
 
-        # Keep video for revolution documentation
-        # Files are stored for historical record of the revolution
-        # try:
-        #     os.remove(output_path)
-        # except:
-        #     pass
-
         context.user_data['awaiting_media'] = False
 
     except Exception as e:
-        logger.error(f"Error processing video: {e}")
+        logger.error(f"Error processing video: {e}", exc_info=True)
         await update.message.reply_text(
             TEXTS['media_error'],
             parse_mode='Markdown'
         )
+    finally:
+        # SEC-003: Always clean up temp files
+        for path in (input_path, output_path):
+            if path and os.path.exists(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+        # Fail-safe: always reset awaiting_media state
+        context.user_data['awaiting_media'] = False
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -832,10 +863,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif context.user_data.get('awaiting_conduit_screenshot', False):
         # This is a Conduit verification screenshot
         await update.message.reply_text(TEXTS['conduit_screenshot_received'])
+        
+        # SEC-005: Check file size BEFORE download (do NOT store file_id before validation)
+        if photo.file_size and photo.file_size > MAX_PHOTO_SIZE:
+            await update.message.reply_text(
+                f"❌ حجم عکس بیش از حد مجاز است ({MAX_PHOTO_SIZE // (1024*1024)} MB)",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data['awaiting_conduit_screenshot'] = False
+            context.user_data.pop('conduit_screenshot_file_id', None)
+            return
 
-        # Store screenshot file_id temporarily
+        # Store screenshot file_id AFTER passing size validation
         context.user_data['conduit_screenshot_file_id'] = photo.file_id
 
+        # SEC-004: Initialize path for cleanup in finally
+        file_path = None
         # Try OCR verification
         try:
             # Download photo
@@ -844,15 +887,21 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 file_path = tmp.name
                 await file.download_to_drive(file_path)
 
-            # Run OCR verification
-            ocr_result = ConduitHelper.verify_screenshot(file_path)
-
-            # Keep photo for revolution documentation
-            # Files are stored for historical record
-            # try:
-            #     os.unlink(file_path)
-            # except:
-            #     pass
+            # SEC-006: Run OCR with timeout and concurrency limit
+            async with SEC_OCR_SEM:
+                loop = asyncio.get_running_loop()
+                try:
+                    ocr_result = await asyncio.wait_for(
+                        loop.run_in_executor(_ocr_executor, ConduitHelper.verify_screenshot, file_path),
+                        timeout=30.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("OCR timeout after 30s")
+                    # Clean up all stale OCR/conduit state
+                    for key in ('ocr_tier', 'ocr_amount_gb', 'ocr_confidence', 'ocr_raw_text', 'conduit_screenshot_file_id'):
+                        context.user_data.pop(key, None)
+                    context.user_data['awaiting_conduit_screenshot'] = False
+                    ocr_result = {'success': False, 'should_fallback': True}
 
             # Check if OCR succeeded
             if ocr_result['success'] and not ocr_result['should_fallback']:
@@ -885,6 +934,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         except Exception as e:
             logger.error(f"OCR processing failed: {e}", exc_info=True)
+            # Clean up all stale OCR/conduit state on exception
+            for key in ('ocr_tier', 'ocr_amount_gb', 'ocr_confidence', 'ocr_raw_text', 'conduit_screenshot_file_id'):
+                context.user_data.pop(key, None)
+            context.user_data['awaiting_conduit_screenshot'] = False
+        finally:
+            # SEC-004: Always clean up temp files
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.unlink(file_path)
+                except OSError:
+                    pass
 
         # Fallback to manual selection
         keyboard = [
@@ -971,14 +1031,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "tweet_confirm":
         # User confirms they tweeted
-        # Rate limiting: only allow 1 tweet confirmation per hour
+        # SEC-007: DB-backed rate limiting (persists across restarts)
         from datetime import timedelta
         
-        cooldown_key = f'tweet_cooldown_{user.id}'
-        last_claim = context.user_data.get(cooldown_key)
+        user_hash = db.get_user_hash(user.id)
+        last_action = db.get_last_action(user_hash, 'tweet_confirm')
         
-        if last_claim:
-            time_since = datetime.now() - last_claim
+        if last_action:
+            time_since = datetime.now() - last_action
             if time_since < timedelta(hours=1):
                 remaining = timedelta(hours=1) - time_since
                 minutes = int(remaining.total_seconds() // 60)
@@ -988,8 +1048,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
         
-        # Set cooldown
-        context.user_data[cooldown_key] = datetime.now()
+        # Set cooldown in DB
+        db.set_last_action(user_hash, 'tweet_confirm')
         
         if USE_SECURE_DATABASE:
             cert_data = db.add_points(user.id, POINTS['tweet_shared'], 'tweet_shared')
@@ -1020,14 +1080,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "email_completed":
         # User confirms they sent all emails in @IRAN_EMAIL_BOT
-        # Rate limiting: only allow 1 email completion per 24 hours
-        from datetime import datetime, timedelta
+        # SEC-007: DB-backed rate limiting (persists across restarts)
+        from datetime import timedelta
         
-        cooldown_key = f'email_cooldown_{user.id}'
-        last_claim = context.user_data.get(cooldown_key)
+        user_hash = db.get_user_hash(user.id)
+        last_action = db.get_last_action(user_hash, 'email_completed')
         
-        if last_claim:
-            time_since = datetime.now() - last_claim
+        if last_action:
+            time_since = datetime.now() - last_action
             if time_since < timedelta(hours=24):
                 remaining = timedelta(hours=24) - time_since
                 hours = int(remaining.total_seconds() // 3600)
@@ -1039,8 +1099,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
         
-        # Set cooldown
-        context.user_data[cooldown_key] = datetime.now()
+        # Set DB-backed cooldown (persists across restarts)
+        db.set_last_action(user_hash, 'email_completed')
         
         if USE_SECURE_DATABASE:
             cert_data = db.add_points(user.id, 500, 'email_campaign_completed')
@@ -1080,14 +1140,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "report_completed":
         # User confirms they submitted a patriotic report
-        # Rate limiting: only allow 1 report per 24 hours
+        # SEC-007: DB-backed rate limiting (persists across restarts)
         from datetime import timedelta
         
-        cooldown_key = f'report_cooldown_{user.id}'
-        last_claim = context.user_data.get(cooldown_key)
+        user_hash = db.get_user_hash(user.id)
+        last_action = db.get_last_action(user_hash, 'report_completed')
         
-        if last_claim:
-            time_since = datetime.now() - last_claim
+        if last_action:
+            time_since = datetime.now() - last_action
             if time_since < timedelta(hours=24):
                 remaining = timedelta(hours=24) - time_since
                 hours = int(remaining.total_seconds() // 3600)
@@ -1099,8 +1159,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
         
-        # Set cooldown
-        context.user_data[cooldown_key] = datetime.now()
+        # Set DB-backed cooldown (persists across restarts)
+        db.set_last_action(user_hash, 'report_completed')
         
         if USE_SECURE_DATABASE:
             cert_data = db.add_points(user.id, 100, 'patriotic_report_submitted')
@@ -2249,7 +2309,8 @@ async def approve_video_command(
         logger.info(f"Admin {user_id} approved video {submission_token} (user identity protected)")
 
     except Exception as e:
-        await update.message.reply_text(f"❌ خطا: {str(e)}")
+        logger.error(f"Error approving video: {e}", exc_info=True)
+        await update.message.reply_text("❌ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
 
 
 async def reject_video_command(
@@ -2304,7 +2365,8 @@ async def reject_video_command(
         logger.info(f"Admin {user_id} rejected video {submission_token} (user identity protected)")
 
     except Exception as e:
-        await update.message.reply_text(f"❌ خطا: {str(e)}")
+        logger.error(f"Error rejecting video: {e}", exc_info=True)
+        await update.message.reply_text("❌ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
 
 
 async def approve_gathering_command(
@@ -2357,7 +2419,8 @@ async def approve_gathering_command(
             f"Admin {user_id} approved gathering {submission_token} (user identity protected)")
 
     except Exception as e:
-        await update.message.reply_text(f"❌ خطا در ارسال پیام: {str(e)}")
+        logger.error(f"Error approving gathering: {e}", exc_info=True)
+        await update.message.reply_text("❌ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
 
 
 async def reject_gathering_command(
@@ -2414,7 +2477,8 @@ async def reject_gathering_command(
             f"Admin {user_id} rejected gathering {submission_token} (user identity protected)")
 
     except Exception as e:
-        await update.message.reply_text(f"❌ خطا در ارسال پیام: {str(e)}")
+        logger.error(f"Error rejecting gathering: {e}", exc_info=True)
+        await update.message.reply_text("❌ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
 
 
 async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2536,8 +2600,8 @@ async def get_certificate_command(update: Update, context: ContextTypes.DEFAULT_
         logger.info(f"Certificate sent: {certificate_id}")
         
     except Exception as e:
-        logger.error(f"Error generating certificate: {e}")
-        await update.message.reply_text(f"❌ خطا در ایجاد گواهینامه: {str(e)}")
+        logger.error(f"Error generating certificate: {e}", exc_info=True)
+        await update.message.reply_text("❌ خطایی در ایجاد گواهینامه رخ داد. لطفاً دوباره تلاش کنید.")
 
 
 async def verify_certificate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2618,8 +2682,8 @@ async def my_rank_card_command(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.info("Rank card generated and sent")
         
     except Exception as e:
-        logger.error(f"Error generating rank card: {e}")
-        await update.message.reply_text(f"❌ خطا در ایجاد کارت رتبه: {str(e)}")
+        logger.error(f"Error generating rank card: {e}", exc_info=True)
+        await update.message.reply_text("❌ خطایی در ایجاد کارت رتبه رخ داد. لطفاً دوباره تلاش کنید.")
 
 
 # ==================== END ADMIN COMMANDS ====================

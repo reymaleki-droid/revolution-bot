@@ -169,6 +169,16 @@ class SecureDatabase:
             )
         ''')
         
+        # SEC-007: Rate limits table for persistent cooldowns
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                user_hash TEXT NOT NULL,
+                action TEXT NOT NULL,
+                last_action TEXT NOT NULL,
+                PRIMARY KEY (user_hash, action)
+            )
+        ''')
+        
         # Initialize statistics if not exists
         stats_to_init = [
             ('total_users', '0'),
@@ -210,6 +220,36 @@ class SecureDatabase:
             conn.close()
             logger.debug("User already exists")
             return False
+    
+    def get_user_hash(self, user_id: int) -> str:
+        """SEC-007: Get user hash for rate limiting"""
+        return self._hash_user_id(user_id)
+    
+    def get_last_action(self, user_hash: str, action: str) -> Optional[datetime]:
+        """SEC-007: Get last action timestamp for rate limiting"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT last_action FROM rate_limits WHERE user_hash = ? AND action = ?',
+            (user_hash, action)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return datetime.fromisoformat(row['last_action'])
+        return None
+    
+    def set_last_action(self, user_hash: str, action: str) -> None:
+        """SEC-007: Set last action timestamp for rate limiting"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            '''INSERT OR REPLACE INTO rate_limits (user_hash, action, last_action)
+               VALUES (?, ?, ?)''',
+            (user_hash, action, datetime.now().isoformat())
+        )
+        conn.commit()
+        conn.close()
     
     def add_points(self, user_id: int, points: int, action_type: str) -> Optional[Dict]:
         """Add points to user and log action (expires in 30 days)

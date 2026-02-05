@@ -123,7 +123,7 @@ class MediaSecurity:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=60  # SEC-010: Reduced from 300s to 60s
             )
             
             if result.returncode == 0:

@@ -51,7 +51,7 @@ def check_config():
             print("   Edit config.py and add your bot token from @BotFather")
             return False
         else:
-            print(f"✅ BOT_TOKEN configured: {BOT_TOKEN[:10]}...")
+            print("✅ BOT_TOKEN configured: [REDACTED]")
         
         if "yourdomain.com" in WEBAPP_URL:
             print("⚠️  WEBAPP_URL not configured (using placeholder)")
