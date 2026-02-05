@@ -6,9 +6,16 @@ __pycache__/
 
 # Sensitive files - NEVER COMMIT
 .env
+.env.local
+.env.test
+.env.production
 *.salt
 user_hash.salt
+
+# Database files (may contain user data)
 *.db
+*.sqlite
+*.sqlite3
 revolution_bot*.db
 secure_bot.db
 
@@ -23,3 +30,13 @@ badges/
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+
+# Legacy/deprecated files (optional - can be removed entirely)
+# legacy/

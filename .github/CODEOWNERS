@@ -1,0 +1,28 @@
+# CODEOWNERS - Defines required reviewers for code changes
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: Security team reviews everything
+* @helpiran-security-team
+
+# Core bot code - requires core maintainer + security
+bot.py @helpiran-core-maintainers @helpiran-security-team
+config.py @helpiran-core-maintainers @helpiran-security-team
+secure_database_pg.py @helpiran-core-maintainers @helpiran-security-team
+
+# Security-critical files - security team only
+SECURITY.md @helpiran-security-team
+THREAT_MODEL.md @helpiran-security-team
+KILL_SWITCH.md @helpiran-security-team
+GOVERNANCE.md @helpiran-security-team
+
+# CI/CD workflows - requires security review
+.github/workflows/* @helpiran-security-team
+.github/CODEOWNERS @helpiran-security-team
+.pre-commit-config.yaml @helpiran-security-team
+
+# Dependency changes - requires security review
+requirements.txt @helpiran-security-team
+
+# Environment configuration - requires security review
+.env.example @helpiran-security-team
+docker-compose.yml @helpiran-security-team

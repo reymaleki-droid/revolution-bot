@@ -1,11 +1,12 @@
 # National Revolution 1404 Telegram Bot
 # Python dependencies
 
-# Telegram Bot Framework (v20+)
-python-telegram-bot==20.7
+# Telegram Bot Framework (v20+) with job-queue support
+python-telegram-bot[job-queue]==20.7
 
-# Database
-# SQLite is built-in, no additional packages needed
+# Database - PostgreSQL async driver
+asyncpg==0.29.0
+psycopg[binary]==3.1.18
 
 # Image/Video Processing (for metadata stripping)
 # Note: Requires ffmpeg to be installed on system

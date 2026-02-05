@@ -1,0 +1,194 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for thorough scan
+
+      - name: Run Gitleaks (Secret Scanner)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_NOTIFY_USER_LIST: '@${{ github.actor }}'
+
+      - name: Scan for Telegram Bot Tokens
+        run: |
+          echo "🔍 Scanning for Telegram bot token patterns..."
+          if grep -rE '[0-9]{7,10}:[A-Za-z0-9_-]{30,50}' --include="*.py" --include="*.md" --include="*.txt" --include="*.json" --include="*.yml" --include="*.yaml" --include="*.env*" . 2>/dev/null | grep -v ".env.example" | grep -v "# Format:"; then
+            echo "❌ FAIL: Potential Telegram bot token detected!"
+            exit 1
+          fi
+          echo "✅ No Telegram tokens found"
+
+      - name: Scan for PostgreSQL Connection Strings
+        run: |
+          echo "🔍 Scanning for PostgreSQL credentials..."
+          if grep -rE 'postgresql://[^:]+:[^@]+@[^/]+' --include="*.py" --include="*.md" --include="*.json" --include="*.yml" . 2>/dev/null | grep -v ".env.example" | grep -v "# Format:" | grep -v "docker-compose"; then
+            echo "❌ FAIL: PostgreSQL connection string with credentials detected!"
+            exit 1
+          fi
+          echo "✅ No PostgreSQL credentials found"
+
+      - name: Scan for Hardcoded Secrets
+        run: |
+          echo "🔍 Scanning for hardcoded secrets..."
+          PATTERNS=(
+            "HASH_PEPPER\s*=\s*['\"][a-f0-9]{32,}['\"]"
+            "USER_HASH_SALT\s*=\s*['\"][a-f0-9]{32,}['\"]"
+            "password\s*=\s*['\"][^'\"]{8,}['\"]"
+            "api_key\s*=\s*['\"][^'\"]+['\"]"
+            "secret\s*=\s*['\"][^'\"]+['\"]"
+          )
+          FOUND=0
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -riE "$pattern" --include="*.py" . 2>/dev/null | grep -v "os.getenv\|os\.environ\|\.example\|# Generate"; then
+              echo "⚠️ Potential hardcoded secret matching: $pattern"
+              FOUND=1
+            fi
+          done
+          if [ $FOUND -eq 1 ]; then
+            echo "❌ FAIL: Hardcoded secrets detected!"
+            exit 1
+          fi
+          echo "✅ No hardcoded secrets found"
+
+  file-safety:
+    name: Dangerous File Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Block .env files
+        run: |
+          echo "🔍 Checking for .env files..."
+          if find . -name ".env" -o -name ".env.local" -o -name ".env.production" -o -name ".env.test" 2>/dev/null | grep -v ".env.example"; then
+            echo "❌ FAIL: .env file detected in repository!"
+            echo "Remove .env files and use .env.example instead"
+            exit 1
+          fi
+          echo "✅ No .env files found"
+
+      - name: Block database files
+        run: |
+          echo "🔍 Checking for database files..."
+          if find . -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" 2>/dev/null | head -1 | grep .; then
+            echo "❌ FAIL: Database file detected in repository!"
+            exit 1
+          fi
+          echo "✅ No database files found"
+
+      - name: Block salt files
+        run: |
+          echo "🔍 Checking for salt files..."
+          if find . -name "*.salt" -o -name "user_hash.salt" 2>/dev/null | head -1 | grep .; then
+            echo "❌ FAIL: Salt file detected in repository!"
+            exit 1
+          fi
+          echo "✅ No salt files found"
+
+      - name: Verify .gitignore coverage
+        run: |
+          echo "🔍 Verifying .gitignore protections..."
+          REQUIRED_PATTERNS=(".env" "*.db" "*.salt" "*.sqlite")
+          for pattern in "${REQUIRED_PATTERNS[@]}"; do
+            if ! grep -q "$pattern" .gitignore; then
+              echo "❌ FAIL: .gitignore missing pattern: $pattern"
+              exit 1
+            fi
+          done
+          echo "✅ .gitignore properly configured"
+
+  code-security:
+    name: Code Security Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install bandit safety
+
+      - name: Run Bandit (Python Security Linter)
+        run: |
+          echo "🔍 Running Bandit security analysis..."
+          bandit -r . -x ./legacy,./tests,./.venv --severity-level medium -f json -o bandit-report.json || true
+          bandit -r . -x ./legacy,./tests,./.venv --severity-level high
+        continue-on-error: true
+
+      - name: Check for unsafe logging
+        run: |
+          echo "🔍 Checking for PII in logging..."
+          # Check for logging that might expose user_id (excluding admin audit logs)
+          if grep -rn "logger\.\(info\|debug\|warning\|error\).*user_id" --include="*.py" . 2>/dev/null | grep -v "legacy/" | grep -v "identity protected" | grep -v "Admin"; then
+            echo "⚠️ WARNING: Potential PII in logs detected"
+            echo "Ensure user identifiers are not logged"
+          fi
+          echo "✅ Logging check complete"
+
+  dependency-audit:
+    name: Dependency Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Safety (Vulnerability Scanner)
+        run: |
+          pip install safety
+          safety check --full-report || echo "⚠️ Some vulnerabilities detected - review required"
+        continue-on-error: true
+
+  summary:
+    name: Security Summary
+    needs: [secret-scan, file-safety, code-security, dependency-audit]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "================================"
+          echo "🔒 SECURITY SCAN COMPLETE"
+          echo "================================"
+          echo ""
+          echo "Secret Scan: ${{ needs.secret-scan.result }}"
+          echo "File Safety: ${{ needs.file-safety.result }}"
+          echo "Code Security: ${{ needs.code-security.result }}"
+          echo "Dependency Audit: ${{ needs.dependency-audit.result }}"
+          echo ""
+          if [ "${{ needs.secret-scan.result }}" == "failure" ] || [ "${{ needs.file-safety.result }}" == "failure" ]; then
+            echo "❌ CRITICAL: Security checks failed!"
+            echo "This PR cannot be merged until issues are resolved."
+            exit 1
+          fi
+          echo "✅ All critical security checks passed"

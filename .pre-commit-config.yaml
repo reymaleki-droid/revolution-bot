@@ -1,0 +1,88 @@
+# Pre-commit configuration for security hardening
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Gitleaks - Secret Detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.1
+    hooks:
+      - id: gitleaks
+
+  # Detect secrets with high entropy
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: \.env\.example$
+
+  # Block dangerous files
+  - repo: local
+    hooks:
+      # Block .env files
+      - id: no-env-files
+        name: Block .env files
+        entry: bash -c 'echo "❌ BLOCKED: .env files cannot be committed"; exit 1'
+        language: system
+        files: '^\.env$|^\.env\.[^e]|^\.env\.local$|^\.env\.production$|^\.env\.test$'
+
+      # Block database files
+      - id: no-db-files
+        name: Block database files
+        entry: bash -c 'echo "❌ BLOCKED: Database files cannot be committed"; exit 1'
+        language: system
+        files: '\.db$|\.sqlite$|\.sqlite3$'
+
+      # Block salt files
+      - id: no-salt-files
+        name: Block salt files
+        entry: bash -c 'echo "❌ BLOCKED: Salt files cannot be committed"; exit 1'
+        language: system
+        files: '\.salt$|user_hash\.salt$'
+
+      # Block Telegram bot tokens
+      - id: no-telegram-tokens
+        name: Block Telegram bot tokens
+        entry: bash -c 'if grep -E "[0-9]{7,10}:[A-Za-z0-9_-]{35,}" "$@" 2>/dev/null | grep -v "\.example" | grep -v "# Format"; then echo "❌ BLOCKED: Telegram bot token detected"; exit 1; fi'
+        language: system
+        files: '\.(py|md|txt|json|yml|yaml)$'
+        exclude: '^\.env\.example$'
+
+      # Block PostgreSQL credentials
+      - id: no-postgres-creds
+        name: Block PostgreSQL credentials
+        entry: bash -c 'if grep -E "postgresql://[^:]+:[^@]+@" "$@" 2>/dev/null | grep -v "\.example" | grep -v "# Format" | grep -v "docker-compose" | grep -v "localdevonly"; then echo "❌ BLOCKED: PostgreSQL credentials detected"; exit 1; fi'
+        language: system
+        files: '\.(py|md|txt|json|yml|yaml)$'
+
+      # Check for hardcoded secrets in Python
+      - id: no-hardcoded-secrets
+        name: Block hardcoded secrets in Python
+        entry: bash -c 'if grep -E "(HASH_PEPPER|USER_HASH_SALT|password|api_key|secret_key)\s*=\s*[\"'"'"'][a-zA-Z0-9]{16,}[\"'"'"']" "$@" 2>/dev/null | grep -v "os\.getenv\|os\.environ\|\.example"; then echo "❌ BLOCKED: Hardcoded secret detected"; exit 1; fi'
+        language: system
+        files: '\.py$'
+        exclude: '^legacy/'
+
+  # Python code quality (optional but recommended)
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        args: ['--check', '--diff']
+        language_version: python3.11
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: ['--max-line-length=120', '--ignore=E501,W503,E203']
+        exclude: '^legacy/'
+
+  # Security-focused Python linting
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.7
+    hooks:
+      - id: bandit
+        args: ['-x', 'legacy,tests', '--severity-level', 'high']
+        exclude: '^legacy/'

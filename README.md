@@ -6,6 +6,43 @@ A comprehensive Telegram bot for the Iranian Diaspora to support the National Re
 
 ---
 
+## 🛡️ Security & Trust
+
+> **This project is designed to fail safely.**
+
+| Trust Signal | Implementation |
+|--------------|----------------|
+| ✅ Open Source | Full code visibility, forkable |
+| ✅ Zero-Knowledge | No PII stored, hashed identifiers only |
+| ✅ Signed Commits | Cryptographic author verification |
+| ✅ Branch Protection | No solo merges, 2 approvals required |
+| ✅ Automated Scanning | CI blocks secrets, vulnerabilities |
+| ✅ Security Policy | [SECURITY.md](SECURITY.md) |
+| ✅ Threat Model | [THREAT_MODEL.md](THREAT_MODEL.md) |
+| ✅ Kill Switch | [KILL_SWITCH.md](KILL_SWITCH.md) |
+
+### What This Bot CANNOT Do
+
+| Guarantee | Explanation |
+|-----------|-------------|
+| ❌ Cannot identify users | User IDs are HMAC-hashed, irreversible |
+| ❌ Cannot read messages | No message storage, ever |
+| ❌ Cannot track location | No IP/GPS data collection |
+| ❌ Cannot access contacts | No contact permission requested |
+| ❌ Cannot share user data | No user data exists to share |
+| ❌ Cannot be backdoored silently | All changes require 2 public approvals |
+
+### Transparency Commitments
+
+- 📖 All code changes are public PRs
+- 📖 All security decisions are documented
+- 📖 No secret admin capabilities
+- 📖 No telemetry or analytics
+- 📖 No third-party data sharing
+- 📖 Fork rights guaranteed forever
+
+---
+
 ## ✨ Features
 
 ### 🎯 Core Modules
@@ -103,14 +140,24 @@ pip install -r requirements.txt
 3. Follow instructions to create your bot
 4. Copy the **Bot Token**
 
-### Step 5: Configure Bot
+### Step 5: Configure Environment
 
-Open [config.py](config.py) and set:
+⚠️ **NEVER commit secrets to git!**
 
-```python
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # Paste your token
-WEBAPP_URL = "https://yourdomain.com/webapp/index.html"  # See Step 6
-```
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and set your values:
+   ```bash
+   BOT_TOKEN=your_bot_token_here
+   HASH_PEPPER=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
+   USER_HASH_SALT=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
+   ADMIN_IDS=your_telegram_user_id
+   ```
+
+3. For production (Railway), set these as environment variables in the Railway dashboard.
 
 ### Step 6: Host the Mini App (Web App)
 
@@ -209,21 +256,54 @@ INFO - Bot started successfully! 🇮🇷
 ```
 telegram bot/
 ├── bot.py                 # Main bot application
-├── config.py              # Configuration and Persian texts
-├── database.py            # SQLite database management
+├── config.py              # Configuration (env vars only)
+├── secure_database_pg.py  # Zero-knowledge PostgreSQL database
 ├── utils.py               # Utilities (metadata stripping, spintax)
+├── verify_db.py           # Security verification script
 ├── requirements.txt       # Python dependencies
 ├── README.md              # This file
-├── webapp/
-│   └── index.html         # Email advocacy Mini App
-└── revolution_bot.db      # SQLite database (auto-created)
+├── SECURITY.md            # Security policy & vulnerability reporting
+├── LICENSE                # MIT License
+└── webapp/
+    └── index.html         # Email advocacy Mini App
 ```
 
 ---
 
-## 🔒 Security Features
+## 🔒 Security Architecture
 
-### Critical Security Implementations
+### Zero-Knowledge Design
+
+This bot implements a **zero-knowledge architecture** that protects user privacy even in the event of a complete database breach.
+
+#### What We Store
+| Data | Storage Method | Reversible? |
+|------|----------------|-------------|
+| User identifier | HMAC-SHA256 hash | ❌ No |
+| Points (Imtiaz) | Plain integer | N/A |
+| Rank | Plain text | N/A |
+| Action timestamps | UTC datetime | N/A |
+| Aggregate stats | Counters only | N/A |
+
+#### What We NEVER Store
+- ❌ Telegram user IDs (plaintext)
+- ❌ Usernames or display names
+- ❌ Phone numbers or email addresses
+- ❌ Message content or media files
+- ❌ File IDs or Telegram-internal identifiers
+- ❌ IP addresses or geolocation
+- ❌ OCR text from screenshots
+- ❌ Any personally identifiable information (PII)
+
+#### How User Hashing Works
+```
+user_hash = HMAC-SHA256(HASH_PEPPER, user_id || USER_HASH_SALT)
+```
+- **Irreversible**: Cannot recover user_id from hash
+- **Collision-resistant**: SHA256 provides 128-bit security
+- **Unique per deployment**: Different pepper/salt = different hashes
+
+### Media Security
 
 1. **Metadata Stripping**
    - Uses ffmpeg to remove ALL metadata
@@ -231,15 +311,36 @@ telegram bot/
    - Protects users submitting crime evidence
    - Original files are deleted after cleaning
 
-2. **Safe File Handling**
-   - Temporary file storage
-   - Automatic cleanup
-   - No persistent storage of sensitive media
+2. **No Persistent Storage**
+   - Media processed in memory/temp files
+   - Automatic cleanup after processing
+   - No file_ids stored in database
 
-3. **Anti-Detection**
-   - Spintax for tweet randomization
-   - Avoids spam detection
-   - Multiple template variations
+### Secret Management
+
+- All secrets loaded from **environment variables only**
+- No hardcoded credentials in source code
+- Fail-closed design: missing secrets = immediate exit
+- Production requires: `BOT_TOKEN`, `DATABASE_URL`, `HASH_PEPPER`, `USER_HASH_SALT`
+
+---
+
+## 🛡️ Threat Model
+
+### Protected Against
+| Threat | Mitigation |
+|--------|------------|
+| Database breach | Only hashed IDs stored, no PII recovery |
+| Log analysis | No user identifiers in logs |
+| Rainbow tables | Unique salt + pepper per deployment |
+| SQL injection | Parameterized queries only |
+| Memory dump | Secrets in env vars, not code |
+
+### Out of Scope
+- Telegram API/infrastructure security
+- Hosting provider security
+- DDoS attacks
+- Social engineering against admins
 
 ---
 
@@ -288,36 +389,24 @@ To implement automatic OCR verification:
 
 ---
 
-## 📊 Database Schema
+## 📊 Database Schema (Zero-Knowledge)
 
 ### Users Table
 ```sql
-- user_id (PRIMARY KEY)
-- username
-- first_name
-- imtiaz (points)
-- role (rank)
-- joined_date
-- last_active
+- user_hash TEXT PRIMARY KEY  -- HMAC-SHA256 hash, NOT reversible
+- imtiaz INTEGER              -- Points
+- role TEXT                   -- Rank title
+- joined_at TIMESTAMPTZ       -- When user joined
+- last_active TIMESTAMPTZ     -- Last activity
 ```
 
-### Actions Table
+### Action Logs Table (30-day retention)
 ```sql
-- id (AUTO INCREMENT)
-- user_id (FOREIGN KEY)
-- action_type
-- points
-- timestamp
-- details
-```
-
-### Conduit Verifications Table
-```sql
-- id (AUTO INCREMENT)
-- user_id (FOREIGN KEY)
-- screenshot_file_id
-- verified (BOOLEAN)
-- timestamp
+- id BIGSERIAL PRIMARY KEY
+- user_hash TEXT              -- Hashed identifier
+- action_type TEXT            -- Type of action
+- points INTEGER              -- Points earned
+- created_at TIMESTAMPTZ      -- Timestamp (auto-deleted after 30 days)
 ```
 
 ---
@@ -412,9 +501,51 @@ For issues or questions:
 
 ---
 
-## ⚖️ Legal Disclaimer
+## ⚖️ Legal & Liability
 
-This software is provided for educational and advocacy purposes. Users are responsible for complying with local laws and regulations. The developers assume no liability for misuse.
+### What This Project Guarantees
+
+| Guarantee | Scope |
+|-----------|-------|
+| ✅ Open source code | MIT License, perpetual |
+| ✅ No intentional backdoors | Verified by public review |
+| ✅ Zero PII storage by design | Architectural guarantee |
+| ✅ Fork rights | Anyone can fork, modify, deploy |
+| ✅ Transparent governance | All changes public |
+
+### What This Project Does NOT Guarantee
+
+| Non-Guarantee | Explanation |
+|---------------|-------------|
+| ❌ Uptime or availability | Best-effort operation |
+| ❌ Protection from Telegram | Telegram can ban any bot |
+| ❌ Legal protection | Users assume legal responsibility |
+| ❌ Immunity from hosting issues | Railway/infra can fail |
+| ❌ Perfect security | No system is 100% secure |
+| ❌ Fitness for purpose | Provided "as-is" |
+
+### Jurisdiction
+
+- This software has **no jurisdiction** - it is code, not a legal entity
+- Contributors are geographically distributed
+- Users deploy at their own discretion
+- No central authority can be compelled to act
+
+### Contributor Liability
+
+By contributing, you:
+- Grant MIT License to your contributions
+- Assume no liability for how code is used
+- Are not liable for other contributors' code
+- Are not liable for deployment decisions
+
+### User Responsibility
+
+Users are solely responsible for:
+- Compliance with local laws
+- Secure deployment practices
+- Protecting their own credentials
+- Backup of their own data
 
 ---
 

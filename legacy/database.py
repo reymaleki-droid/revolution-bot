@@ -1,17 +1,40 @@
 """
-Database module for National Revolution 1404 Bot
+⚠️ DEPRECATED - DO NOT USE IN PRODUCTION ⚠️
+
+This module stores PLAINTEXT user IDs and PII (username, first_name).
+It is kept ONLY for local development/testing purposes.
+
+For production, use: secure_database_pg.py
+  - Zero-knowledge architecture
+  - HMAC-SHA256 hashed user identifiers
+  - No PII storage
+  - PostgreSQL with async support
+
+Database module for National Revolution 1404 Bot (INSECURE - DEV ONLY)
 Handles user tracking, gamification, and leaderboard
 """
 import sqlite3
 import logging
+import warnings
 from datetime import datetime
 from typing import Optional, List, Tuple, Dict
 
 logger = logging.getLogger(__name__)
 
+# Emit deprecation warning when imported
+warnings.warn(
+    "database.py is DEPRECATED and stores plaintext PII. "
+    "Use secure_database_pg.py for production.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 
 class Database:
-    """Manages SQLite database operations for the bot"""
+    """
+    ⚠️ INSECURE - Stores plaintext user_id, username, first_name
+    Use SecureDatabase from secure_database_pg.py instead
+    """
     
     def __init__(self, db_path: str = "revolution_bot.db"):
         self.db_path = db_path

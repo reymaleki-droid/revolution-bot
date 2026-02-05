@@ -8,7 +8,7 @@ import os
 import random
 import tempfile
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict
 from urllib.parse import quote
 
@@ -23,7 +23,7 @@ from telegram.ext import (
 )
 from concurrent.futures import ThreadPoolExecutor
 
-from secure_database import SecureDatabase
+from secure_database_pg import SecureDatabase, get_database
 from utils import MediaSecurity, Spintax, ConduitHelper, TextFormatter, validate_environment
 from config import (
     BOT_TOKEN,
@@ -38,7 +38,9 @@ from config import (
     EMAIL_BODY_TEMPLATES,
     CONDUIT_TIERS,
     USE_SECURE_DATABASE,
-    ADMIN_IDS)
+    ACTION_LOG_RETENTION_DAYS,
+    ADMIN_IDS,
+)
 
 # Logging configuration
 logging.basicConfig(
@@ -65,8 +67,28 @@ if not USE_SECURE_DATABASE:
         "Legacy database stores PII and is not permitted."
     )
 
-db = SecureDatabase()
-logger.info("✅ Running with SECURE zero-knowledge database")
+# Database singleton - initialized via post_init
+db: SecureDatabase = get_database()
+
+
+async def post_init(application: Application) -> None:
+    """Post-initialization hook for async database setup."""
+    await db.initialize()
+    
+    if not await db.health_check():
+        raise RuntimeError("Database health check failed")
+    
+    logger.info("✅ Database initialized and healthy")
+
+
+async def retention_cleanup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """JobQueue callback for daily retention cleanup."""
+    try:
+        deleted = await db.cleanup_old_action_logs()
+        if deleted > 0:
+            logger.info(f"Retention job: cleaned up {deleted} old action logs")
+    except Exception as e:
+        logger.error(f"Retention cleanup error: {e}")
 
 
 async def send_certificate_notification(update: Update, certificate_data: Dict):
@@ -159,19 +181,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
     # Add user to database (secure DB only needs user_id)
-    if USE_SECURE_DATABASE:
-        db.add_user(user.id)
-        cert_data = db.add_points(user.id, POINTS['daily_login'], 'daily_login')
-        # Send certificate if rank changed
-        if cert_data:
-            await send_certificate_notification(update, cert_data)
-    else:
-        db.add_user(user.id, user.username, user.first_name)
-        db.add_points(
-            user.id,
-            POINTS['daily_login'],
-            'daily_login',
-            'User started bot')
+    await db.add_user(user.id)
+    cert_data = await db.add_points(user.id, POINTS['daily_login'], 'daily_login')
+    # Send certificate if rank changed
+    if cert_data:
+        await send_certificate_notification(update, cert_data)
 
     welcome_text = TEXTS['welcome'].format(
         name=user.first_name or user.username or 'میهن پرست داوطلب گارد جاویدان')
@@ -524,19 +538,15 @@ async def handle_profile_button(
     """Show user profile with advanced gamification"""
     user = update.effective_user
 
-    stats = db.get_user_stats(user.id)
-    rank = db.get_user_rank(user.id)
+    stats = await db.get_user_stats(user.id)
+    rank = await db.get_user_rank(user.id)
 
     if stats:
         # Secure database returns dict with keys: imtiaz, role, joined_date
-        if USE_SECURE_DATABASE:
-            imtiaz = stats['imtiaz']
-            role = stats['role']
-            joined_date = stats['joined_date']
-            name = "میهن‌پرست"  # No name stored in secure DB
-        else:
-            username, first_name, imtiaz, role, joined_date = stats
-            name = username or first_name or "ناشناس"
+        imtiaz = stats['imtiaz']
+        role = stats['role']
+        joined_date = stats['joined_date']
+        name = "میهن‌پرست"  # No name stored in secure DB
 
         # Calculate points needed for next rank (12-level system)
         from config import RANK_THRESHOLDS
@@ -565,21 +575,21 @@ async def handle_profile_button(
         progress_bar = '█' * filled + '░' * (10 - filled)
         
         # Get streaks
-        streaks = db.get_user_streaks(user.id)
+        streaks = await db.get_user_streaks(user.id)
         streak_text = ""
         if streaks:
             top_streak = streaks[0]
-            streak_text = f"\n🔥 رگه فعلی: {top_streak['current']} روز (بهترین: {top_streak['longest']})"
+            streak_text = f"\n🔥 رگه فعلی: {top_streak.get('current_streak', 0)} روز (بهترین: {top_streak.get('longest_streak', 0)})"
         
         # Get achievements
-        achievements = db.get_user_achievements(user.id)
+        achievements = await db.get_user_achievements(user.id)
         achievement_text = ""
         if achievements:
             badges = ' '.join([ach['badge'] for ach in achievements[:5]])  # Show top 5
             achievement_text = f"\n🏆 دستاوردها: {badges} ({len(achievements)} کل)"
         
         # Get daily combo
-        combo_info = db.check_daily_combo(user.id)
+        combo_info = await db.check_daily_combo(user.id)
         combo_text = ""
         if combo_info['unique_actions'] >= 3:
             combo_text = f"\n{combo_info['badge']} کمبو امروز: {combo_info['unique_actions']}x فعالیت!"
@@ -620,7 +630,7 @@ async def handle_leaderboard_button(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE):
     """Show leaderboard"""
-    leaderboard = db.get_leaderboard(10)
+    leaderboard = await db.get_leaderboard(10)
 
     if leaderboard:
         formatted = TextFormatter.format_leaderboard(leaderboard)
@@ -662,18 +672,10 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         # Award points anyway for testing
-        if USE_SECURE_DATABASE:
-            cert_data = db.add_points(user.id, POINTS['media_submitted'], 'media_submitted_test')
-            stats = db.get_user_stats(user.id)
-            new_score = stats['imtiaz']
-            new_role = stats['role']
-        else:
-            new_score, new_role = db.add_points(
-                user.id,
-                POINTS['media_submitted'],
-                'media_submitted_test',
-                f'Video submitted (test mode): {update.message.video.file_id}'
-            )
+        cert_data = await db.add_points(user.id, POINTS['media_submitted'], 'media_submitted_test')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
         await update.message.reply_text(
             f"✅ امتیاز شما: +{POINTS['media_submitted']}\n"
             f"مجموع: {new_score}\n"
@@ -682,7 +684,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # Send certificate if rank changed
-        if USE_SECURE_DATABASE and cert_data:
+        if cert_data:
             await send_certificate_notification(update, cert_data)
         context.user_data['awaiting_media'] = False
         return
@@ -717,18 +719,10 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await loop.run_in_executor(None, MediaSecurity.strip_metadata, input_path, output_path)
 
         # Award points
-        if USE_SECURE_DATABASE:
-            cert_data = db.add_points(user.id, POINTS['media_submitted'], 'media_submitted')
-            stats = db.get_user_stats(user.id)
-            new_score = stats['imtiaz']
-            new_role = stats['role']
-        else:
-            new_score, new_role = db.add_points(
-                user.id,
-                POINTS['media_submitted'],
-                'media_submitted',
-                f'Video submitted: {video.file_id}'
-            )
+        cert_data = await db.add_points(user.id, POINTS['media_submitted'], 'media_submitted')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
 
         # Send cleaned video back
         with open(output_path, 'rb') as clean_video:
@@ -785,28 +779,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             after_photo_id = photo.file_id
 
             # Save to database (user will provide location later)
-            db.add_cleanup_action(
+            await db.add_cleanup_action(
                 user.id,
-                location="Protest location",
                 country="Unknown",
                 city="Unknown",
-                before_photo_id=before_photo_id,
-                after_photo_id=after_photo_id
+                media_type='photo',
+                file_id=after_photo_id,
+                caption=None
             )
 
             # Award points
-            if USE_SECURE_DATABASE:
-                cert_data = db.add_points(user.id, POINTS['protest_cleanup'], 'protest_cleanup')
-                stats = db.get_user_stats(user.id)
-                new_score = stats['imtiaz']
-                new_role = stats['role']
-            else:
-                new_score, new_role = db.add_points(
-                    user.id,
-                    POINTS['protest_cleanup'],
-                    'protest_cleanup',
-                    f'Cleanup photos: {before_photo_id}, {after_photo_id}'
-                )
+            cert_data = await db.add_points(user.id, POINTS['protest_cleanup'], 'protest_cleanup')
+            stats = await db.get_user_stats(user.id)
+            new_score = stats['imtiaz']
+            new_role = stats['role']
 
             await update.message.reply_text(
                 TEXTS['cleanup_completed'].format(points=POINTS['protest_cleanup']),
@@ -815,7 +801,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             # Send certificate if rank changed
-            if USE_SECURE_DATABASE and cert_data:
+            if cert_data:
                 await send_certificate_notification(update, cert_data)
 
             # Clear state
@@ -825,7 +811,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check for protest media upload
     elif context.user_data.get('awaiting_protest_media', False):
-        db.add_protest_media(
+        await db.add_protest_media(
             user.id,
             country="Unknown",
             city="Unknown",
@@ -834,18 +820,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption=update.message.caption
         )
 
-        if USE_SECURE_DATABASE:
-            cert_data = db.add_points(user.id, POINTS['protest_media_shared'], 'protest_media_shared')
-            stats = db.get_user_stats(user.id)
-            new_score = stats['imtiaz']
-            new_role = stats['role']
-        else:
-            new_score, new_role = db.add_points(
-                user.id,
-                POINTS['protest_media_shared'],
-                'protest_media_shared',
-                f'Photo: {photo.file_id}'
-            )
+        cert_data = await db.add_points(user.id, POINTS['protest_media_shared'], 'protest_media_shared')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
 
         await update.message.reply_text(
             TEXTS['protest_media_received'].format(points=POINTS['protest_media_shared']),
@@ -854,7 +832,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # Send certificate if rank changed
-        if USE_SECURE_DATABASE and cert_data:
+        if cert_data:
             await send_certificate_notification(update, cert_data)
 
         context.user_data['awaiting_protest_media'] = False
@@ -1031,14 +1009,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "tweet_confirm":
         # User confirms they tweeted
-        # SEC-007: DB-backed rate limiting (persists across restarts)
-        from datetime import timedelta
+        # SEC-007: DB-backed rate limiting (PostgreSQL, persists across restarts)
         
         user_hash = db.get_user_hash(user.id)
-        last_action = db.get_last_action(user_hash, 'tweet_confirm')
+        last_action = await db.get_last_action(user_hash, 'tweet_confirm')
         
         if last_action:
-            time_since = datetime.now() - last_action
+            now = datetime.now(timezone.utc)
+            time_since = now - last_action
             if time_since < timedelta(hours=1):
                 remaining = timedelta(hours=1) - time_since
                 minutes = int(remaining.total_seconds() // 60)
@@ -1049,29 +1027,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
         
         # Set cooldown in DB
-        db.set_last_action(user_hash, 'tweet_confirm')
+        await db.set_last_action(user_hash, 'tweet_confirm')
         
-        if USE_SECURE_DATABASE:
-            cert_data = db.add_points(user.id, POINTS['tweet_shared'], 'tweet_shared')
-            stats = db.get_user_stats(user.id)
-            new_score = stats['imtiaz']
-            await query.edit_message_text(
-                TEXTS['tweet_confirmed'].format(total=new_score),
-                parse_mode='Markdown'
-            )
-            if cert_data:
-                await send_certificate_notification(query, cert_data)
-        else:
-            new_score, new_role = db.add_points(
-                user.id,
-                POINTS['tweet_shared'],
-                'tweet_shared',
-                'Daily tweet confirmed'
-            )
-            await query.edit_message_text(
-                TEXTS['tweet_confirmed'].format(total=new_score),
-                parse_mode='Markdown'
-            )
+        cert_data = await db.add_points(user.id, POINTS['tweet_shared'], 'tweet_shared')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        await query.edit_message_text(
+            TEXTS['tweet_confirmed'].format(total=new_score),
+            parse_mode='Markdown'
+        )
+        if cert_data:
+            await send_certificate_notification(query, cert_data)
 
         await query.message.reply_text(
             "عالی! 💪",
@@ -1080,14 +1046,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "email_completed":
         # User confirms they sent all emails in @IRAN_EMAIL_BOT
-        # SEC-007: DB-backed rate limiting (persists across restarts)
-        from datetime import timedelta
+        # SEC-007: DB-backed rate limiting (PostgreSQL)
         
         user_hash = db.get_user_hash(user.id)
-        last_action = db.get_last_action(user_hash, 'email_completed')
+        last_action = await db.get_last_action(user_hash, 'email_completed')
         
         if last_action:
-            time_since = datetime.now() - last_action
+            now = datetime.now(timezone.utc)
+            time_since = now - last_action
             if time_since < timedelta(hours=24):
                 remaining = timedelta(hours=24) - time_since
                 hours = int(remaining.total_seconds() // 3600)
@@ -1099,21 +1065,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
         
-        # Set DB-backed cooldown (persists across restarts)
-        db.set_last_action(user_hash, 'email_completed')
+        # Set DB-backed cooldown
+        await db.set_last_action(user_hash, 'email_completed')
         
-        if USE_SECURE_DATABASE:
-            cert_data = db.add_points(user.id, 500, 'email_campaign_completed')
-            stats = db.get_user_stats(user.id)
-            new_score = stats['imtiaz']
-            new_role = stats['role']
-        else:
-            new_score, new_role = db.add_points(
-                user.id,
-                500,  # Big reward for completing all emails
-                'email_campaign_completed',
-                'Completed all email campaigns in @IRAN_EMAIL_BOT'
-            )
+        cert_data = await db.add_points(user.id, 500, 'email_campaign_completed')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
 
         success_message = f"""✅ <b>عالی! کار شما ثبت شد</b>
 
@@ -1135,19 +1093,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # Send certificate if rank changed
-        if USE_SECURE_DATABASE and cert_data:
+        if cert_data:
             await send_certificate_notification(query, cert_data)
 
     elif data == "report_completed":
         # User confirms they submitted a patriotic report
-        # SEC-007: DB-backed rate limiting (persists across restarts)
-        from datetime import timedelta
+        # SEC-007: DB-backed rate limiting (PostgreSQL)
         
         user_hash = db.get_user_hash(user.id)
-        last_action = db.get_last_action(user_hash, 'report_completed')
+        last_action = await db.get_last_action(user_hash, 'report_completed')
         
         if last_action:
-            time_since = datetime.now() - last_action
+            now = datetime.now(timezone.utc)
+            time_since = now - last_action
             if time_since < timedelta(hours=24):
                 remaining = timedelta(hours=24) - time_since
                 hours = int(remaining.total_seconds() // 3600)
@@ -1159,21 +1117,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
         
-        # Set DB-backed cooldown (persists across restarts)
-        db.set_last_action(user_hash, 'report_completed')
+        # Set DB-backed cooldown
+        await db.set_last_action(user_hash, 'report_completed')
         
-        if USE_SECURE_DATABASE:
-            cert_data = db.add_points(user.id, 100, 'patriotic_report_submitted')
-            stats = db.get_user_stats(user.id)
-            new_score = stats['imtiaz']
-            new_role = stats['role']
-        else:
-            new_score, new_role = db.add_points(
-                user.id,
-                100,
-                'patriotic_report_submitted',
-                'Submitted report to iranopasmigirim.com'
-            )
+        cert_data = await db.add_points(user.id, 100, 'patriotic_report_submitted')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
 
         success_message = f"""✅ <b>گزارش شما ثبت شد</b>
 
@@ -1189,7 +1139,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='HTML'
         )
         
-        if USE_SECURE_DATABASE and cert_data:
+        if cert_data:
             await send_certificate_notification(query, cert_data)
 
         await query.message.reply_text(
@@ -1302,42 +1252,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 points = tier_info['points']
                 badge = tier_info['badge']
 
-                # Log to database with OCR data
-                db.log_conduit_verification(
-                    user.id,
-                    screenshot_file_id,
-                    tier_name,
-                    points,
-                    ocr_extracted_amount=amount_gb,
-                    ocr_confidence=confidence,
-                    verification_method='auto',
-                    ocr_raw_text=ocr_raw_text[:500]  # Truncate
-                )
-
-                # Award points
-                if USE_SECURE_DATABASE:
-                    cert_data = db.add_points(user.id, points, 'conduit_verified')
-                    db.log_conduit_verification(user.id, tier_name, amount_gb, points)
-                    stats = db.get_user_stats(user.id)
-                    new_score = stats['imtiaz']
-                    new_role = stats['role']
-                else:
-                    db.log_conduit_verification(
-                        user.id,
-                        screenshot_file_id,
-                        tier_name,
-                        points,
-                        ocr_extracted_amount=amount_gb,
-                        ocr_confidence=confidence,
-                        verification_method='auto',
-                        ocr_raw_text=ocr_raw_text[:500]  # Truncate
-                    )
-                    new_score, new_role = db.add_points(
-                        user.id,
-                        points,
-                        'conduit_verified',
-                        f'Conduit {tier_name} GB (OCR): {screenshot_file_id}'
-                    )
+                # Award points and log verification
+                cert_data = await db.add_points(user.id, points, 'conduit_verified')
+                await db.log_conduit_verification(user.id, tier_name, amount_gb, points)
+                stats = await db.get_user_stats(user.id)
+                new_score = stats['imtiaz']
+                new_role = stats['role']
 
                 await query.edit_message_text(
                     TEXTS['conduit_verified'].format(
@@ -1351,7 +1271,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 # Send certificate if rank changed
-                if USE_SECURE_DATABASE and cert_data:
+                if cert_data:
                     await send_certificate_notification(query, cert_data)
 
                 # Clear user data
@@ -1405,35 +1325,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             badge = tier_info['badge']
 
             # Check if OCR data exists (user manually overrode OCR)
-            ocr_amount = context.user_data.get('ocr_amount_gb')
-            ocr_confidence = context.user_data.get('ocr_confidence', 0)
-            ocr_raw_text = context.user_data.get('ocr_raw_text', '')
+            ocr_amount = context.user_data.get('ocr_amount_gb', 0)
 
-            # Log to database with data amount and points
-            db.log_conduit_verification(
-                user.id,
-                screenshot_file_id,
-                tier_name,
-                points,
-                ocr_extracted_amount=ocr_amount,
-                ocr_confidence=ocr_confidence,
-                verification_method='manual',
-                ocr_raw_text=ocr_raw_text[:500] if ocr_raw_text else None
-            )
-
-            # Award points
-            if USE_SECURE_DATABASE:
-                cert_data = db.add_points(user.id, points, 'conduit_verified')
-                stats = db.get_user_stats(user.id)
-                new_score = stats['imtiaz']
-                new_role = stats['role']
-            else:
-                new_score, new_role = db.add_points(
-                    user.id,
-                    points,
-                    'conduit_verified',
-                    f'Conduit {tier_name} GB: {screenshot_file_id}'
-                )
+            # Award points and log verification
+            cert_data = await db.add_points(user.id, points, 'conduit_verified')
+            await db.log_conduit_verification(user.id, tier_name, ocr_amount, points)
+            stats = await db.get_user_stats(user.id)
+            new_score = stats['imtiaz']
+            new_role = stats['role']
 
             await query.edit_message_text(
                 TEXTS['conduit_verified'].format(
@@ -1477,7 +1376,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Protest System Callbacks
     elif data == "protests_calendar":
         # Show list of countries with protests
-        countries = db.get_unique_countries()
+        countries = await db.get_unique_countries()
         if not countries:
             countries = [
                 "USA",
@@ -1507,7 +1406,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("protest_country_"):
         country = data.replace("protest_country_", "")
-        events = db.get_protest_events_by_country(country)
+        events = await db.get_protest_events_by_country(country)
         
         if events:
             keyboard = []
@@ -1539,7 +1438,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("protest_event_"):
         event_id = int(data.replace("protest_event_", ""))
-        event = db.get_protest_event(event_id)
+        event = await db.get_protest_event(event_id)
 
         if event:
             country, city, location, date, time, organizer, attendees = event
@@ -1567,21 +1466,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("protest_attend_"):
         event_id = int(data.replace("protest_attend_", ""))
-        success = db.mark_protest_attendance(event_id, user.id)
+        success = await db.mark_protest_attendance(event_id, user.id)
 
         if success:
-            if USE_SECURE_DATABASE:
-                cert_data = db.add_points(user.id, POINTS['protest_attendance'], 'protest_attendance')
-                stats = db.get_user_stats(user.id)
-                new_score = stats['imtiaz']
-                new_role = stats['role']
-            else:
-                new_score, new_role = db.add_points(
-                    user.id,
-                    POINTS['protest_attendance'],
-                    'protest_attendance',
-                    f'Event {event_id}'
-                )
+            cert_data = await db.add_points(user.id, POINTS['protest_attendance'], 'protest_attendance')
+            stats = await db.get_user_stats(user.id)
+            new_score = stats['imtiaz']
+            new_role = stats['role']
 
             await query.edit_message_text(
                 TEXTS['protest_attendance_confirmed'].format(points=POINTS['protest_attendance']),
@@ -1589,7 +1480,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             # Send certificate if rank changed
-            if USE_SECURE_DATABASE and cert_data:
+            if cert_data:
                 await send_certificate_notification(query, cert_data)
         else:
             await query.edit_message_text("شما قبلاً برای این تجمعات ثبت‌نام کرده‌اید.")
@@ -1690,7 +1581,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("protest_org_"):
         country = data.replace("protest_org_", "")
-        organizers = db.get_organizers_by_country(country)
+        organizers = await db.get_organizers_by_country(country)
         
         if organizers:
             text = f"👥 *هماهنگ‌کنندگان در {country}*\n\n"
@@ -1731,7 +1622,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "back_to_profile":
         # Return to profile menu from submenus
-        stats = db.get_user_stats(user.id)
+        stats = await db.get_user_stats(user.id)
         if not stats:
             await query.edit_message_text("❌ خطا در دریافت اطلاعات. /start را بزنید.")
             return
@@ -1769,7 +1660,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         try:
-            certificates = db.get_user_certificates(user.id)
+            certificates = await db.get_user_certificates(user.id)
             keyboard = [[InlineKeyboardButton("🔙 بازگشت به پروفایل", callback_data="back_to_profile")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -1821,7 +1712,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("در حال ایجاد کارت درجه شما... ⏳")
         
         try:
-            stats = db.get_user_stats(user.id)
+            stats = await db.get_user_stats(user.id)
             if not stats:
                 await query.message.reply_text(
                     "❌ خطا در دریافت اطلاعات شما.\n\n"
@@ -1829,10 +1720,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            rank = db.get_user_rank(user.id)
-            achievements = db.get_user_achievements(user.id)
-            streaks = db.get_user_streaks(user.id)
-            streak = streaks[0]['current'] if streaks else 0
+            rank = await db.get_user_rank(user.id)
+            achievements = await db.get_user_achievements(user.id)
+            streaks = await db.get_user_streaks(user.id)
+            streak = streaks[0]['current_streak'] if streaks else 0
 
             from certificate_generator import get_certificate_generator
             generator = get_certificate_generator()
@@ -1860,7 +1751,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif data == "my_achievements":
         # Show achievements list
-        achievements = db.get_user_achievements(user.id)
+        achievements = await db.get_user_achievements(user.id)
         keyboard = [[InlineKeyboardButton("🔙 بازگشت به پروفایل", callback_data="back_to_profile")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -2116,7 +2007,7 @@ async def admin_stats_command(
         return
 
     # Get anonymous aggregate statistics
-    stats = db.get_aggregate_statistics()
+    stats = await db.get_aggregate_statistics()
 
     # Format statistics message (Persian)
     message = "📊 **آمار کلی (ناشناس)**\n\n"
@@ -2167,7 +2058,7 @@ async def export_stats_command(
         return
 
     # Get statistics
-    stats = db.get_aggregate_statistics()
+    stats = await db.get_aggregate_statistics()
 
     # Create CSV content
     import csv
@@ -2232,7 +2123,7 @@ async def delete_my_data_command(
         return
 
     # Delete user data (keeps imtiaz and role)
-    db.delete_user_data(user_id)
+    await db.delete_user_data(user_id)
 
     message = "✅ **داده‌های فعالیت شما حذف شد**\n\n"
     message += "🏆 امتیاز و درجه شما حفظ شد (افتخار شما محفوظ است)\n"
@@ -2273,18 +2164,10 @@ async def approve_video_command(
 
     try:
         # Grant points to user
-        if USE_SECURE_DATABASE:
-            cert_data = db.add_points(requester_id, reward, submission_type)
-            stats = db.get_user_stats(requester_id)
-            new_score = stats['imtiaz']
-            new_role = stats['role']
-        else:
-            new_score, new_role = db.add_points(
-                requester_id,
-                reward,
-                submission_type,
-                f'Video testimonial approved: {submission_type}'
-            )
+        cert_data = await db.add_points(requester_id, reward, submission_type)
+        stats = await db.get_user_stats(requester_id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
 
         # Notify the user
         await context.bot.send_message(
@@ -2306,7 +2189,7 @@ async def approve_video_command(
             f"🔗 لینک(ها):\n{links}",
             parse_mode='Markdown'
         )
-        logger.info(f"Admin {user_id} approved video {submission_token} (user identity protected)")
+        logger.info(f"Admin (identity protected) approved video {submission_token}")
 
     except Exception as e:
         logger.error(f"Error approving video: {e}", exc_info=True)
@@ -2362,7 +2245,7 @@ async def reject_video_command(
             f"کاربر ناشناس مطلع شد.",
             parse_mode='Markdown'
         )
-        logger.info(f"Admin {user_id} rejected video {submission_token} (user identity protected)")
+        logger.info(f"Admin (identity protected) rejected video {submission_token}")
 
     except Exception as e:
         logger.error(f"Error rejecting video: {e}", exc_info=True)
@@ -2416,7 +2299,7 @@ async def approve_gathering_command(
             parse_mode='Markdown'
         )
         logger.info(
-            f"Admin {user_id} approved gathering {submission_token} (user identity protected)")
+            f"Admin (identity protected) approved gathering {submission_token}")
 
     except Exception as e:
         logger.error(f"Error approving gathering: {e}", exc_info=True)
@@ -2474,7 +2357,7 @@ async def reject_gathering_command(
             parse_mode='Markdown'
         )
         logger.info(
-            f"Admin {user_id} rejected gathering {submission_token} (user identity protected)")
+            f"Admin (identity protected) rejected gathering {submission_token}")
 
     except Exception as e:
         logger.error(f"Error rejecting gathering: {e}", exc_info=True)
@@ -2490,14 +2373,14 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Get user stats
-    stats = db.get_user_stats(user_id)
+    stats = await db.get_user_stats(user_id)
 
     if not stats:
         await update.message.reply_text("شما هنوز ثبت‌نام نکرده‌اید. از /start استفاده کنید.")
         return
 
     # Get user rank
-    rank = db.get_user_rank(user_id)
+    rank = await db.get_user_rank(user_id)
 
     message = "📊 **آمار من**\n\n"
     message += f"🏆 امتیاز: {stats['imtiaz']}\n"
@@ -2519,7 +2402,7 @@ async def my_certificates_command(update: Update, context: ContextTypes.DEFAULT_
         return
 
     # Get user certificates
-    certificates = db.get_user_certificates(user_id)
+    certificates = await db.get_user_certificates(user_id)
 
     if not certificates:
         await update.message.reply_text(
@@ -2566,7 +2449,7 @@ async def get_certificate_command(update: Update, context: ContextTypes.DEFAULT_
     certificate_id = context.args[0]
 
     # Get user certificates to check ownership
-    certificates = db.get_user_certificates(user_id)
+    certificates = await db.get_user_certificates(user_id)
     cert = next((c for c in certificates if c['certificate_id'] == certificate_id), None)
 
     if not cert:
@@ -2621,7 +2504,7 @@ async def verify_certificate_command(update: Update, context: ContextTypes.DEFAU
     certificate_id = context.args[0]
 
     # Verify certificate
-    cert_data = db.verify_certificate(certificate_id)
+    cert_data = await db.verify_certificate(certificate_id)
 
     if not cert_data:
         await update.message.reply_text("❌ این گواهینامه معتبر نیست یا یافت نشد.")
@@ -2647,15 +2530,16 @@ async def my_rank_card_command(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     # Get user stats
-    stats = db.get_user_stats(user_id)
+    stats = await db.get_user_stats(user_id)
     if not stats:
         await update.message.reply_text("شما هنوز ثبت‌نام نکرده‌اید. از /start استفاده کنید.")
         return
 
     # Get additional data
-    rank = db.get_user_rank(user_id)
-    achievements = db.get_user_achievements(user_id)
-    streak = db.get_user_streak(user_id)
+    rank = await db.get_user_rank(user_id)
+    achievements = await db.get_user_achievements(user_id)
+    streak_data = await db.get_user_streak(user_id)
+    streak = streak_data.get('current_streak', 0) if streak_data else 0
 
     # Generate rank card
     from certificate_generator import get_certificate_generator
@@ -2713,8 +2597,17 @@ def main():
             "⚠️  WEBAPP_URL not configured - email campaigns won't work")
         logger.warning("📝 See NEXT_STEPS.md for hosting instructions")
 
-    # Create application
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Create application with post_init hook for async DB setup
+    application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+
+    # Schedule daily retention cleanup job via JobQueue
+    # Runs every 24 hours, first run 60 seconds after startup
+    application.job_queue.run_repeating(
+        retention_cleanup_job,
+        interval=timedelta(hours=24),
+        first=timedelta(seconds=60),
+        name="retention_cleanup"
+    )
 
     # Register handlers
     application.add_handler(CommandHandler("start", start))
@@ -2771,14 +2664,7 @@ def main():
     application.add_error_handler(error_handler)
 
     # Start bot
-    logger.info("Bot started successfully! 🦁☀️")
-
-    # Python 3.14 compatibility: ensure event loop exists
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        asyncio.set_event_loop(asyncio.new_event_loop())
-
+    logger.info("Bot starting... 🦁☀️")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

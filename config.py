@@ -3,6 +3,7 @@ Configuration file for National Revolution 1404 Bot
 Persian texts, templates, and settings
 """
 import os
+import sys
 from pathlib import Path
 
 # Load environment variables from .env file
@@ -12,6 +13,10 @@ try:
 except ImportError:
     pass  # dotenv not required, use environment variables directly
 
+# Detect Railway environment
+RAILWAY_ENVIRONMENT = os.getenv('RAILWAY_ENVIRONMENT')
+IS_PRODUCTION = bool(RAILWAY_ENVIRONMENT)
+
 # Default Language
 DEFAULT_LANGUAGE = 'fa'
 
@@ -19,12 +24,32 @@ DEFAULT_LANGUAGE = 'fa'
 # CRITICAL: Never hardcode tokens - always use environment variables
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
-    raise RuntimeError(
-        "CRITICAL: BOT_TOKEN environment variable not set!\n"
-        "1. Get token from @BotFather on Telegram\n"
-        "2. Create .env file with: BOT_TOKEN=your_token_here\n"
-        "3. Never commit tokens to git!"
-    )
+    print("CRITICAL: BOT_TOKEN environment variable not set!", file=sys.stderr)
+    sys.exit(1)
+
+# Database configuration (PostgreSQL)
+DATABASE_URL = os.getenv('DATABASE_URL')
+if IS_PRODUCTION and not DATABASE_URL:
+    print("CRITICAL: DATABASE_URL not set in Railway environment", file=sys.stderr)
+    sys.exit(1)
+
+# SEC: HASH_PEPPER for HMAC-based user hashing (64 hex chars recommended)
+# Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+HASH_PEPPER = os.getenv('HASH_PEPPER')
+if IS_PRODUCTION and not HASH_PEPPER:
+    print("CRITICAL: HASH_PEPPER not set in Railway environment", file=sys.stderr)
+    sys.exit(1)
+
+# SEC: USER_HASH_SALT (hex-encoded bytes) for stable hashing across deploys
+# Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+# If not set, falls back to file-based salt (not recommended for production)
+USER_HASH_SALT = os.getenv('USER_HASH_SALT')
+if IS_PRODUCTION and not USER_HASH_SALT:
+    print("CRITICAL: USER_HASH_SALT not set in Railway environment", file=sys.stderr)
+    sys.exit(1)
+
+# Data retention policy (days) - action logs older than this are purged
+ACTION_LOG_RETENTION_DAYS = int(os.getenv('ACTION_LOG_RETENTION_DAYS', '30'))
 
 WEBAPP_URL = os.getenv('WEBAPP_URL', "")  # Set in .env file when ready
 
