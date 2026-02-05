@@ -2061,8 +2061,7 @@ async def admin_stats_command(
     # Format statistics message (Persian)
     message = "📊 **آمار کلی (ناشناس)**\n\n"
     message += f"👥 تعداد کل کاربران: {stats['total_users']}\n"
-    message += f"📶 مجموع دیتا اشتراک‌گذاری شده: {
-        stats['total_gb_shared']:.2f} GB\n"
+    message += f"📶 مجموع دیتا اشتراک‌گذاری شده: {stats['total_gb_shared']:.2f} GB\n"
     message += f"🧹 تعداد کل پاکسازی‌ها: {stats['total_cleanups']}\n"
     message += f"📢 تعداد کل تجمعات: {stats['total_protests']}\n\n"
 
