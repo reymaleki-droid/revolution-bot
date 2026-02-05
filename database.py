@@ -5,7 +5,7 @@ Handles user tracking, gamification, and leaderboard
 import sqlite3
 import logging
 from datetime import datetime
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
 logger = logging.getLogger(__name__)
 
