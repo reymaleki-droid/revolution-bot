@@ -589,3 +589,6 @@ Together, we fight for a free, democratic Iran. Every email, every tweet, every 
 ---
 
 *Built with ❤️ for Iranian freedom fighters worldwide*
+
+
+<!-- security-test: PR gate validation -->
