@@ -58,9 +58,57 @@ Even critical security fixes **MUST** go through a PR:
 
 ---
 
-## If You Previously Bypassed Protection
+## Automated Emergency Merge (`scripts/emergency_merge.ps1`)
 
-If `enforce_admins` was temporarily disabled (as occurred during initial hardening):
+When the standard 2-approval workflow **cannot** be satisfied (e.g. single
+maintainer, all reviewers unavailable during a security incident), use the
+audited emergency merge script instead of ad-hoc API calls.
+
+### Prerequisites — ALL must be true
+
+| # | Condition | Verify |
+|---|-----------|--------|
+| 1 | The PR is **open** and all CI checks are **green** | Script validates automatically |
+| 2 | The change is **security-critical** or blocks a production fix | Operator judgement |
+| 3 | You have **admin** access to the repository | Required for API calls |
+| 4 | No reviewer can provide approval within **1 hour** | Document in SEC-INCIDENT issue |
+
+### Usage
+
+```powershell
+# Dry run — snapshots protection, validates PR, makes NO changes
+.\scripts\emergency_merge.ps1 -PrNumber 15 -DryRun
+
+# Live merge — lowers protection, merges, restores, writes audit log
+.\scripts\emergency_merge.ps1 -PrNumber 15
+```
+
+### What the script does
+
+| Phase | Action | Duration |
+|-------|--------|----------|
+| **1 — Snapshot** | Saves full branch protection JSON to `logs/protection-snapshot-*.json` and validates PR state + CI | Seconds |
+| **2 — Lower** | Disables `enforce_admins`, sets approvals to 1 (keeps CODEOWNERS, keeps all status checks) | Seconds |
+| **3 — Merge** | Squash-merges the PR and deletes the feature branch | Seconds |
+| **4 — Restore** | Re-applies the **exact** original protection from the snapshot | Seconds |
+| **5 — Audit** | Writes timestamped log to `logs/emergency-merge-audit-*.log` | Instant |
+
+### After every use
+
+1. **File a `SEC-INCIDENT` issue** (the script prints the exact command)
+2. **Review the audit log** in `logs/` and attach it to the issue
+3. **Verify protection** was restored: run the verification commands below
+
+> ⚠️ **This script is a safety net, not a shortcut.** Every use is logged and
+> must be justified. Abuse will result in repository access revocation per
+> GOVERNANCE.md § Prohibited Actions.
+
+---
+
+## If You Previously Bypassed Protection (manually)
+
+If `enforce_admins` was disabled via manual API calls (without the emergency
+merge script):
 
 1. **Document** what was pushed and why
 2. **Verify** the commit contents are safe: `git log --oneline -5 && git diff HEAD~1`
@@ -69,7 +117,7 @@ If `enforce_admins` was temporarily disabled (as occurred during initial hardeni
    gh api -X POST repos/<owner>/<repo>/branches/master/protection/enforce_admins
    ```
 4. **File an incident report** (see GOVERNANCE.md § Incident Reporting)
-5. **Never repeat** — use the Emergency PR sequence above instead
+5. **Use `scripts/emergency_merge.ps1`** for any future emergency merges
 
 ---
 
