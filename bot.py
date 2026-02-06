@@ -1976,10 +1976,44 @@ async def handle_security_info(
     """Display security and privacy information"""
     await update.message.reply_text(
         TEXTS['security_info'],
-        parse_mode='Markdown',
         reply_markup=get_main_keyboard()
     )
     logger.info("User viewed security information")
+
+
+async def security_identity_command(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
+    """Display identity security details"""
+    await update.message.reply_text(TEXTS['security_identity'])
+
+
+async def security_hashing_command(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
+    """Display hashing security details"""
+    await update.message.reply_text(TEXTS['security_hashing'])
+
+
+async def security_storage_command(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
+    """Display storage security details"""
+    await update.message.reply_text(TEXTS['security_storage'])
+
+
+async def security_code_command(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
+    """Display code transparency details"""
+    await update.message.reply_text(TEXTS['security_code'])
+
+
+async def security_access_command(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
+    """Display access control details"""
+    await update.message.reply_text(TEXTS['security_access'])
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -2642,7 +2676,14 @@ def main():
             "delete_my_data",
             delete_my_data_command))
     application.add_handler(CommandHandler("my_stats", my_stats_command))
-    
+
+    # Security info commands
+    application.add_handler(CommandHandler("security_identity", security_identity_command))
+    application.add_handler(CommandHandler("security_hashing", security_hashing_command))
+    application.add_handler(CommandHandler("security_storage", security_storage_command))
+    application.add_handler(CommandHandler("security_code", security_code_command))
+    application.add_handler(CommandHandler("security_access", security_access_command))
+
     # Certificate and recognition commands
     application.add_handler(CommandHandler("my_certificates", my_certificates_command))
     application.add_handler(CommandHandler("get_certificate", get_certificate_command))
