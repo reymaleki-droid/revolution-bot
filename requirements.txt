@@ -2,7 +2,7 @@
 # Python dependencies
 
 # Telegram Bot Framework (v20+) with job-queue support
-python-telegram-bot[job-queue]==20.7
+python-telegram-bot[job-queue]==22.6
 
 # Database - PostgreSQL async driver
 asyncpg==0.29.0
