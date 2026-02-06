@@ -34,6 +34,8 @@ jobs:
           # - .env.example files
           # - "# Format:" documentation lines
           # - All-X placeholder tokens (e.g. 1234567890:XXXX...)
+          # - test_redaction.py (contains intentional fakes for unit tests)
+          # - secret_scan_selftest (scanner validation script)
           MATCHES=$(grep -rnE '[0-9]{7,10}:[A-Za-z0-9_-]{30,50}' \
             --include="*.py" --include="*.md" --include="*.txt" \
             --include="*.json" --include="*.yml" --include="*.yaml" \
@@ -41,6 +43,7 @@ jobs:
             | grep -v ".env.example" \
             | grep -v "# Format:" \
             | grep -v "secret_scan_selftest" \
+            | grep -v "test_redaction" \
             | grep -vE ':[X]{20,}' \
             || true)
           if [ -n "$MATCHES" ]; then
@@ -53,7 +56,7 @@ jobs:
       - name: Scan for PostgreSQL Connection Strings
         run: |
           echo "🔍 Scanning for PostgreSQL credentials..."
-          if grep -rE 'postgresql://[^:]+:[^@]+@[^/]+' --include="*.py" --include="*.md" --include="*.json" --include="*.yml" . 2>/dev/null | grep -v ".env.example" | grep -v "# Format:" | grep -v "docker-compose"; then
+          if grep -rE 'postgresql://[^:]+:[^@]+@[^/]+' --include="*.py" --include="*.md" --include="*.json" --include="*.yml" . 2>/dev/null | grep -v ".env.example" | grep -v "# Format:" | grep -v "docker-compose" | grep -v "test_redaction"; then
             echo "❌ FAIL: PostgreSQL connection string with credentials detected!"
             exit 1
           fi
@@ -71,7 +74,7 @@ jobs:
           )
           FOUND=0
           for pattern in "${PATTERNS[@]}"; do
-            if grep -riE "$pattern" --include="*.py" . 2>/dev/null | grep -v "os.getenv\|os\.environ\|\.example\|# Generate"; then
+            if grep -riE "$pattern" --include="*.py" . 2>/dev/null | grep -v "os.getenv\|os\.environ\|\.example\|# Generate\|test_redaction"; then
               echo "⚠️ Potential hardcoded secret matching: $pattern"
               FOUND=1
             fi
