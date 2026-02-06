@@ -13,6 +13,62 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Secret redaction — defence-in-depth for log / error output
+# ---------------------------------------------------------------------------
+
+# Telegram bot token: digits:base64url  (but skip all-X placeholders)
+_RE_TELEGRAM_TOKEN = re.compile(
+    r'[0-9]{7,10}:[A-Za-z0-9_-]{30,50}'
+)
+
+# PostgreSQL / Postgres connection URLs (full masking)
+_RE_POSTGRES_URL = re.compile(
+    r'(?:postgresql|postgres)://[^\s\'"<>]+'
+)
+
+# Long hex strings (≥ 32 chars) that look like salts / peppers / keys
+_RE_HEX_SECRET = re.compile(
+    r'(?<![a-fA-F0-9])[a-f0-9]{32,}(?![a-fA-F0-9])'
+)
+
+
+def redact_secrets(text: str | None) -> str:
+    """
+    Redact known secret patterns from *text* before it reaches logs or
+    user-visible output.
+
+    Handles:
+    - Telegram bot tokens  →  ``[REDACTED-TOKEN]``
+    - PostgreSQL URLs      →  ``[REDACTED-DB-URL]``
+    - 32+ hex strings      →  ``[REDACTED-HEX]``
+
+    Placeholder / documentation values (all-X tokens) are left intact so
+    that example docs remain readable.
+    """
+    if not text:
+        return ""
+
+    # 1. Telegram tokens — skip all-X placeholders
+    def _mask_token(m: re.Match) -> str:
+        value = m.group(0)
+        # If the "secret part" (after colon) is all X, it's a placeholder
+        after_colon = value.split(":", 1)[-1]
+        if set(after_colon) <= {"X", "x"}:
+            return value  # keep placeholder
+        return "[REDACTED-TOKEN]"
+
+    text = _RE_TELEGRAM_TOKEN.sub(_mask_token, text)
+
+    # 2. PostgreSQL URLs — full replacement
+    text = _RE_POSTGRES_URL.sub("[REDACTED-DB-URL]", text)
+
+    # 3. Long hex strings (salts / peppers / keys)
+    text = _RE_HEX_SECRET.sub("[REDACTED-HEX]", text)
+
+    return text
+
+
 class MediaSecurity:
     """Handles secure media processing and metadata removal"""
     
