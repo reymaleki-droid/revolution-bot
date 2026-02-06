@@ -30,8 +30,22 @@ jobs:
       - name: Scan for Telegram Bot Tokens
         run: |
           echo "🔍 Scanning for Telegram bot token patterns..."
-          if grep -rE '[0-9]{7,10}:[A-Za-z0-9_-]{30,50}' --include="*.py" --include="*.md" --include="*.txt" --include="*.json" --include="*.yml" --include="*.yaml" --include="*.env*" . 2>/dev/null | grep -v ".env.example" | grep -v "# Format:"; then
+          # Find all matches, then exclude known-safe patterns:
+          # - .env.example files
+          # - "# Format:" documentation lines
+          # - All-X placeholder tokens (e.g. 1234567890:XXXX...)
+          MATCHES=$(grep -rnE '[0-9]{7,10}:[A-Za-z0-9_-]{30,50}' \
+            --include="*.py" --include="*.md" --include="*.txt" \
+            --include="*.json" --include="*.yml" --include="*.yaml" \
+            --include="*.env*" . 2>/dev/null \
+            | grep -v ".env.example" \
+            | grep -v "# Format:" \
+            | grep -v "secret_scan_selftest" \
+            | grep -vE ':[X]{20,}' \
+            || true)
+          if [ -n "$MATCHES" ]; then
             echo "❌ FAIL: Potential Telegram bot token detected!"
+            echo "$MATCHES"
             exit 1
           fi
           echo "✅ No Telegram tokens found"

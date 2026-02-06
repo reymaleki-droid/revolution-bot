@@ -212,4 +212,32 @@ Changes to this governance model require:
 
 ---
 
+## Prohibited Actions
+
+The following actions are **unconditionally prohibited** and constitute a security incident if performed:
+
+| Action | Prohibition | Enforcement |
+|--------|-------------|-------------|
+| Disabling `enforce_admins` on branch protection | **NEVER** — not even for "quick" security fixes | Monitored via GitHub audit log |
+| Direct push to `master` | **NEVER** — use the PR workflow (see RELEASE_WORKFLOW.md) | Branch protection rule |
+| Force push to any protected branch | **NEVER** | Branch protection rule |
+| Creating GitHub Actions / environment secrets | **NEVER** — all secrets live in Railway only | CI job `file-safety` + audit |
+| Merging with fewer than 2 approvals | **NEVER** | Branch protection rule |
+
+### If a Prohibition Is Violated
+
+Any violation of the above **MUST** trigger:
+
+1. **Immediate re-enable** — restore the protection within 5 minutes
+2. **Incident report** — file a GitHub Issue titled `SEC-INCIDENT: <description>` within 24 hours containing:
+   - What was changed and when (exact timestamps from GitHub audit log)
+   - Who performed the action and the justification given
+   - What commits landed outside normal PR flow (list SHAs)
+   - Verification that those commits contain no malicious or secret-leaking content
+   - Corrective action taken to prevent recurrence
+3. **Community notification** — post in GitHub Discussions (Security category)
+4. **Audit** — all commits pushed during the unprotected window must be reviewed by security team
+
+---
+
 *This governance model is designed to ensure that no single individual—including the original creator—can unilaterally compromise user safety.*

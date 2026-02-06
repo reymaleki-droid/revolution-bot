@@ -41,10 +41,10 @@ repos:
         language: system
         files: '\.salt$|user_hash\.salt$'
 
-      # Block Telegram bot tokens
+      # Block Telegram bot tokens (skip all-X placeholders)
       - id: no-telegram-tokens
         name: Block Telegram bot tokens
-        entry: bash -c 'if grep -E "[0-9]{7,10}:[A-Za-z0-9_-]{35,}" "$@" 2>/dev/null | grep -v "\.example" | grep -v "# Format"; then echo "❌ BLOCKED: Telegram bot token detected"; exit 1; fi'
+        entry: bash -c 'if grep -E "[0-9]{7,10}:[A-Za-z0-9_-]{35,}" "$@" 2>/dev/null | grep -v "\.example" | grep -v "# Format" | grep -v "secret_scan_selftest" | grep -vE ":[X]{20,}"; then echo "❌ BLOCKED: Telegram bot token detected"; exit 1; fi'
         language: system
         files: '\.(py|md|txt|json|yml|yaml)$'
         exclude: '^\.env\.example$'

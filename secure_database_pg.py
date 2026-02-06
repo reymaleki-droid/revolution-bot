@@ -136,8 +136,10 @@ class SecureDatabase:
                 logger.info("✅ PostgreSQL database initialized with zero-knowledge architecture")
                 
             except Exception as e:
-                logger.critical(f"Failed to initialize database: {e}")
-                raise RuntimeError(f"Database initialization failed: {e}")
+                from utils import redact_secrets
+                safe_msg = redact_secrets(str(e))
+                logger.critical(f"Failed to initialize database: {safe_msg}")
+                raise RuntimeError(f"Database initialization failed: {safe_msg}")
     
     async def close(self) -> None:
         """Close connection pool gracefully."""
@@ -414,7 +416,8 @@ class SecureDatabase:
                     if physical:
                         certificate_data['physical_reward'] = physical
             except Exception as e:
-                logger.error(f"Failed to issue certificate: {e}")
+                from utils import redact_secrets
+                logger.error(f"Failed to issue certificate: {redact_secrets(str(e))}")
         
         logger.info("Points awarded (identity protected)")
         return certificate_data
@@ -929,7 +932,8 @@ class SecureDatabase:
                 result = await conn.fetchval('SELECT 1')
                 return result == 1
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            from utils import redact_secrets
+            logger.error(f"Health check failed: {redact_secrets(str(e))}")
             return False
     
     # ==================== INTERNAL HELPERS ====================
