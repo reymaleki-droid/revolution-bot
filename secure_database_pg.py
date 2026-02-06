@@ -70,7 +70,7 @@ class SecureDatabase:
                 f.write(salt)
             logger.warning("Created new salt file - BACKUP THIS FILE!")
             logger.warning(f"Salt file location: {salt_file.absolute()}")
-            logger.warning(f"Set USER_HASH_SALT={salt.hex()} in production")
+            logger.warning("Set USER_HASH_SALT=<value from salt file> in production (read file with: python -c 'print(open(\"user_hash.salt\",\"rb\").read().hex())')")
             return salt
     
     def _hash_user_id(self, user_id: int) -> str:
@@ -119,7 +119,7 @@ class SecureDatabase:
                     ssl_context = False
                     logger.info("SSL disabled for Railway internal connection")
                 
-                logger.info(f"Connecting to PostgreSQL: {db_url.split('@')[-1][:40]}...")
+                logger.info("Connecting to PostgreSQL...")
                 
                 # Connect - let asyncpg negotiate SSL with the PostgreSQL server
                 self.pool = await asyncpg.create_pool(
