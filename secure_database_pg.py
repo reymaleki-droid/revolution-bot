@@ -138,8 +138,8 @@ class SecureDatabase:
             except Exception as e:
                 from utils import redact_secrets
                 safe_msg = redact_secrets(str(e))
-                logger.critical(f"Failed to initialize database: {safe_msg}")
-                raise RuntimeError(f"Database initialization failed: {safe_msg}")
+                logger.critical(f"Failed to initialize database [{type(e).__name__}]: {safe_msg}")
+                raise RuntimeError(f"Database initialization failed [{type(e).__name__}]: {safe_msg}")
     
     async def close(self) -> None:
         """Close connection pool gracefully."""
