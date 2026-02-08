@@ -1352,33 +1352,91 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         country = data.replace("protest_country_", "")
         events = await db.get_protest_events_by_country(country)
         
+        # Feb 14 Global Day of Action - hardcoded event
+        feb14_cities = {
+            "USA": "Los Angeles",
+            "Canada": "Toronto",
+            "Germany": "Munich",
+            "UK": "London",
+            "France": "Paris",
+            "Sweden": "Stockholm",
+            "Netherlands": "Amsterdam",
+            "Austria": "Vienna"
+        }
+        
+        keyboard = []
+        
+        # Always show Feb 14 event at the top
+        feb14_city = feb14_cities.get(country, country)
+        keyboard.append([InlineKeyboardButton(
+            f"🔥 ۱۴ فوریه - {feb14_city} - روز جهانی اقدام",
+            callback_data=f"protest_feb14_{country}"
+        )])
+        
         if events:
-            keyboard = []
-            for event in events[:5]:  # Show max 5 events
+            for event in events[:5]:
                 event_id, city, location, date, time, organizer, attendees = event
                 keyboard.append([InlineKeyboardButton(
                     f"📍 {city} - {date}",
                     callback_data=f"protest_event_{event_id}"
                 )])
-            keyboard.append([InlineKeyboardButton(
-                "🔙 بازگشت", callback_data="protests_calendar")])
+        
+        keyboard.append([InlineKeyboardButton(
+            "➕ ثبت تجمعات جدید", callback_data="protest_create_new")])
+        keyboard.append([InlineKeyboardButton(
+            "🔙 بازگشت", callback_data="protests_calendar")])
 
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                f"📅 *تجمعات در {country}*\n\nتجمعات را انتخاب کنید:",
-                parse_mode='Markdown',
-                reply_markup=reply_markup
-            )
-        else:
-            keyboard = [
-                [InlineKeyboardButton("➕ اولین تجمعات را ثبت کنید", callback_data="protest_create_new")],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="protests_calendar")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                f"هیچ تجمعاتی در {country} ثبت نشده است.\n\nاولین نفر باشید!",
-                reply_markup=reply_markup
-            )
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            f"📅 *تجمعات در {country}*\n\nتجمعات را انتخاب کنید:",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+    elif data.startswith("protest_feb14_"):
+        country = data.replace("protest_feb14_", "")
+        feb14_cities = {
+            "USA": "Los Angeles",
+            "Canada": "Toronto",
+            "Germany": "Munich",
+            "UK": "London",
+            "France": "Paris",
+            "Sweden": "Stockholm",
+            "Netherlands": "Amsterdam",
+            "Austria": "Vienna"
+        }
+        city = feb14_cities.get(country, country)
+
+        message_text = f"""🔥 *روز جهانی اقدام — GLOBAL DAY OF ACTION*
+
+━━━━━━━━━━━━━━━━━━━━
+🌍 *کشور:* {country}
+🏙️ *شهر:* {city}
+📅 *تاریخ:* شنبه ۱۴ فوریه ۲۰۲۶ (Saturday February 14, 2026)
+✊ *هدف:* همبستگی با انقلاب شیر و خورشید ایران
+🔗 *سازماندهی:* RISE IRAN!
+━━━━━━━━━━━━━━━━━━━━
+
+🌍 *شهرهای دیگر:* تورنتو • مونیخ • لس‌آنجلس + شهرهای سراسر جهان
+
+🌹 *یادآوری مهم:*
+• گل بیاورید و به تماشاچیان و پلیس هدیه دهید
+• با لبخند و مهربانی حضور پیدا کنید
+• پرچم شیر و خورشید 🦁☀️ همراه داشته باشید
+• بعد از تجمع محل را پاکسازی کنید
+
+💪 *همه با هم — ۱۴ فوریه — سراسر جهان!*"""
+
+        keyboard = [
+            [InlineKeyboardButton(f"🔙 بازگشت به {country}", callback_data=f"protest_country_{country}")],
+            [InlineKeyboardButton("🔙 بازگشت به تقویم", callback_data="protests_calendar")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            message_text,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
 
     elif data.startswith("protest_event_"):
         event_id = int(data.replace("protest_event_", ""))
