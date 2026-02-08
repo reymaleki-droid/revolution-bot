@@ -53,6 +53,9 @@ ACTION_LOG_RETENTION_DAYS = int(os.getenv('ACTION_LOG_RETENTION_DAYS', '30'))
 
 WEBAPP_URL = os.getenv('WEBAPP_URL', "")  # Set in .env file when ready
 
+# Media archive channel - all protest photos/videos are forwarded here for documentation
+MEDIA_CHANNEL_ID = os.getenv('MEDIA_CHANNEL_ID', '')
+
 # Security Settings
 USE_SECURE_DATABASE = os.getenv('USE_SECURE_DATABASE', 'true').lower() == 'true'
 ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_IDS', '').split(',') if id.strip()]

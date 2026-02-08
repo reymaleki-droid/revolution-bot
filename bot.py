@@ -40,6 +40,7 @@ from config import (
     USE_SECURE_DATABASE,
     ACTION_LOG_RETENTION_DAYS,
     ADMIN_IDS,
+    MEDIA_CHANNEL_ID,
 )
 
 # Logging configuration
@@ -48,6 +49,20 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+
+async def forward_to_archive(context, media_type, file_id, caption=""):
+    """Forward media to archive channel for documentation"""
+    if not MEDIA_CHANNEL_ID:
+        return
+    try:
+        channel_id = int(MEDIA_CHANNEL_ID)
+        if media_type == 'photo':
+            await context.bot.send_photo(chat_id=channel_id, photo=file_id, caption=caption)
+        elif media_type == 'video':
+            await context.bot.send_video(chat_id=channel_id, video=file_id, caption=caption)
+    except Exception as e:
+        logger.error(f"Failed to forward media to archive channel: {e}")
 
 # SEC: Concurrency limiters for resource-intensive operations
 SEC_OCR_SEM = asyncio.Semaphore(2)      # Max 2 concurrent OCR jobs
@@ -620,6 +635,9 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_main_keyboard()
         )
 
+        # Forward to archive channel
+        await forward_to_archive(context, 'video', video.file_id, "🌹 تقدیم گل - Flower Gifting")
+
         if cert_data:
             await send_certificate_notification(update, cert_data)
 
@@ -662,6 +680,12 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_main_keyboard()
             )
 
+            # Forward both before and after to archive
+            before_id = context.user_data.get('cleanup_before_photo')
+            if before_id:
+                await forward_to_archive(context, 'video', before_id, "🧹 پاکسازی - قبل / Cleanup Before")
+            await forward_to_archive(context, 'video', video.file_id, "🧹 پاکسازی - بعد / Cleanup After")
+
             if cert_data:
                 await send_certificate_notification(update, cert_data)
 
@@ -692,6 +716,9 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown',
             reply_markup=get_main_keyboard()
         )
+
+        # Forward to archive channel
+        await forward_to_archive(context, 'video', video.file_id, "📸 مستندات تجمع - Protest Media")
 
         if cert_data:
             await send_certificate_notification(update, cert_data)
@@ -835,6 +862,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_main_keyboard()
         )
 
+        # Forward to archive channel
+        await forward_to_archive(context, 'photo', photo.file_id, "🌹 تقدیم گل - Flower Gifting")
+
         if cert_data:
             await send_certificate_notification(update, cert_data)
 
@@ -879,6 +909,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown',
                 reply_markup=get_main_keyboard()
             )
+
+            # Forward both before and after to archive
+            if before_photo_id:
+                await forward_to_archive(context, 'photo', before_photo_id, "🧹 پاکسازی - قبل / Cleanup Before")
+            await forward_to_archive(context, 'photo', after_photo_id, "🧹 پاکسازی - بعد / Cleanup After")
             
             # Send certificate if rank changed
             if cert_data:
@@ -910,6 +945,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown',
             reply_markup=get_main_keyboard()
         )
+
+        # Forward to archive channel
+        await forward_to_archive(context, 'photo', photo.file_id, "📸 مستندات تجمع - Protest Media")
         
         # Send certificate if rank changed
         if cert_data:
