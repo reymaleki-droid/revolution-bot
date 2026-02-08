@@ -705,8 +705,39 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     photo = update.message.photo[-1]  # Get highest resolution
 
+    # Check for flower gifting photo upload
+    if context.user_data.get('awaiting_flower_photo', False):
+        await db.add_protest_media(
+            user.id,
+            country="Unknown",
+            city="Unknown",
+            media_type='photo',
+            file_id=photo.file_id,
+            caption="flower_gifting"
+        )
+
+        cert_data = await db.add_points(user.id, 15, 'flower_gifting')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
+
+        await update.message.reply_text(
+            "🌹 *عالی! عکس تقدیم گل ثبت شد!*\n\n"
+            "+۱۵ امتیاز دریافت کردید! 🏆\n\n"
+            "ممنون که با مهربانی و عشق پیام ایران آزاد را منتقل می‌کنید.\n\n"
+            "💪 *ما نفرت نمی‌آوریم، عشق می‌آوریم!* 🦁☀️",
+            parse_mode='Markdown',
+            reply_markup=get_main_keyboard()
+        )
+
+        if cert_data:
+            await send_certificate_notification(update, cert_data)
+
+        context.user_data['awaiting_flower_photo'] = False
+        return
+
     # Check for cleanup photo upload
-    if context.user_data.get('awaiting_cleanup_photo', False):
+    elif context.user_data.get('awaiting_cleanup_photo', False):
         cleanup_step = context.user_data.get('cleanup_step')
 
         if cleanup_step == 'before_photo':
@@ -899,6 +930,7 @@ async def handle_protests_button(
     """Handle protests coordination button"""
     keyboard = [
         [InlineKeyboardButton("📅 تقویم تجمعات", callback_data="protests_calendar")],
+        [InlineKeyboardButton("🌹 تقدیم گل به پلیس و مردم", callback_data="protests_flowers")],
         [InlineKeyboardButton("🧹 پاکسازی پس از تجمعات", callback_data="protests_cleanup")],
         [InlineKeyboardButton("📸 اشتراک‌گذاری رسانه", callback_data="protests_media")],
         [InlineKeyboardButton("📋 راهنمای تجمعات", callback_data="protests_guidelines")],
@@ -928,7 +960,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'video_viral', 'conduit_manual_select', 'back_to_email_menu',
         'protests_calendar', 'protest_create_new', 'protests_cleanup',
         'protests_media', 'protests_guidelines', 'protests_organizers',
-        'protests_menu', 'back_to_profile', 'my_certificates', 'my_rank_card',
+        'protests_flowers', 'protests_menu', 'back_to_profile', 'my_certificates', 'my_rank_card',
         'my_achievements'
     }
     VALID_PREFIXES = (
@@ -1515,6 +1547,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
+    elif data == "protests_flowers":
+        context.user_data['awaiting_flower_photo'] = True
+
+        keyboard = [[InlineKeyboardButton(
+            "🔙 بازگشت", callback_data="protests_menu")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            TEXTS['flower_campaign_intro'],
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
     elif data == "protests_cleanup":
         context.user_data['cleanup_step'] = 'before_photo'
         context.user_data['awaiting_cleanup_photo'] = True
@@ -1609,6 +1654,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "protests_menu":
         keyboard = [
             [InlineKeyboardButton("📅 تقویم تجمعات", callback_data="protests_calendar")],
+            [InlineKeyboardButton("🌹 تقدیم گل به پلیس و مردم", callback_data="protests_flowers")],
             [InlineKeyboardButton("🧹 پاکسازی پس از تجمعات", callback_data="protests_cleanup")],
             [InlineKeyboardButton("📸 اشتراک‌گذاری رسانه", callback_data="protests_media")],
             [InlineKeyboardButton("📋 راهنمای تجمعات", callback_data="protests_guidelines")],
