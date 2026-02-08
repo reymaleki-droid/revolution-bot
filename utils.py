@@ -255,48 +255,67 @@ class Spintax:
     
     @staticmethod
     def generate_tweet() -> str:
-        """Generate randomized advocacy tweet - CLEARLY identifies Islamic Republic as the killer regime"""
+        """Generate randomized advocacy tweet - authentic Iranian political voice with mandatory hashtags"""
         templates = [
-            # CRITICAL: Islamic Republic = killer regime (in power since 1979)
-            "🚨 {ISLAMIC REPUBLIC|Iran's Islamic regime|Islamic Republic regime} is {executing protesters|killing innocents|murdering civilians} in streets of #Iran! {800+ executed since 2022|Daily killings continue|Mass executions ongoing}! {World must act|Stop the massacres|Invoke R2P}! #IranRevolution #StopExecutions",
-            
-            "{IRGC|Islamic Revolutionary Guard Corps|Regime forces} {shot and killed|murdered|beat to death} {Mahsa Amini|Nika Shakarami|Sarina Esmailzadeh|hundreds of protesters}! {Islamic Republic = murderers|Regime = criminals|They must face justice}! #MahsaAmini #IranProtests #IRGCterrorists",
-            
-            "⚠️ KNOW THE DIFFERENCE: {Islamic Republic = killer regime (since 1979)|Current Iran government = murderers|IRGC = terrorist killers} vs {Reza Pahlavi = opposition leader in exile|Pahlavi = pro-democracy activist|Crown Prince = fighting FOR freedom}! #IranFacts #KnowTheDifference",
-            
-            "{Islamic Republic regime|Iran's mullah regime|Khamenei's dictatorship} has {killed 800+ protesters|executed innocent people|tortured thousands} since Sept 2022! {Reza Pahlavi leads democratic opposition|Pahlavi fights regime from exile|Opposition stands with people}! #IranRevolution #OppositionVsRegime",
-            
-            "🔴 {IRGC shoots protesters|Basij militia beats women|Regime security forces kill teenagers} in #Iran streets! {Khamenei = dictator|Supreme Leader = murderer|Islamic Republic = terrorist state}! {Support democratic opposition|Stand with Reza Pahlavi|End the regime}! #IranProtests #IRGCterrorists",
-            
-            "{Islamic Republic|Mullah regime|Khamenei dictatorship} {poisoned 5000+ schoolgirls|executes teenagers publicly|tortures activists in Evin}! This is {genocide|state terrorism|crime against humanity}! {UN must act|World leaders speak up|Invoke R2P NOW}! #IranGenocide #IslamicRepublicCrimes",
-            
-            "📢 FACTS FOR THE WORLD: {Islamic Republic (1979-now) = brutal theocracy|Current regime = oppressive government|Mullahs = dictators} | {Reza Pahlavi = democratic opposition leader in USA|Pahlavi = secular reform advocate|Crown Prince = people's voice in exile}! {Learn the difference|Share facts}! #IranTruth",
-            
-            "{Regime security forces|IRGC terrorists|Basij paramilitary} are {raping prisoners|torturing protesters|killing civilians} in {Evin Prison|detention centers|Iran's jails}! {Islamic Republic = criminal organization|Regime = systematic violator|Justice must come}! #EvinPrison #IranProtests",
-            
-            "{Islamic Republic regime|Iran's theocracy|Mullah dictatorship} {forces hijab at gunpoint|beats women for dress|arrests girls for dancing}! This is {gender apartheid|state oppression|religious tyranny}! {Iranian women resist daily|Support their fight|End Islamic Republic}! #WomanLifeFreedom #NoHijab",
-            
-            "💔 VICTIMS OF ISLAMIC REPUBLIC: {Armita Geravand, 16|Sarina Esmailzadeh, 16|Nika Shakarami, 17|Mahsa Amini, 22} - {All killed by regime|Murdered for freedom|Lives stolen by dictatorship}! {Say their names|Never forget|Hold killers accountable}! #SayTheirNames #RegimeCrimes",
-            
-            "{Islamic Republic shoots|Regime executes|IRGC murders} protesters for {wanting freedom|demanding basic rights|chanting 'Woman Life Freedom'}! {This regime is NOT Iran|These killers are NOT Iranian people|This is foreign-imposed dictatorship}! {Support opposition|End tyranny}! #IranRevolution",
-            
-            "⚖️ {IRGC = designated terrorist organization|Islamic Revolutionary Guard Corps = war criminals|Basij militia = regime thugs} must be {prosecuted at ICC|sanctioned globally|stopped permanently}! {They kill Iranians|They arm terrorists|They threaten peace}! {Hold them accountable}! #IRGCterrorists #Justice",
-            
-            "{Islamic Republic regime|Iran's mullah government|Khamenei's dictatorship} {supplies drones killing Ukrainians|arms Hezbollah terrorists|funds global terrorism} while {killing Iranian protesters|starving Iranian people|destroying Iran's future}! {Regime = enemy of Iran|Stop Islamic Republic}! #IranRegimeCrimes",
-            
-            "{Reza Pahlavi|@PahlaviReza|Crown Prince Reza} is {opposition leader living in USA|voice of democratic Iran|advocate for secular free Iran} - {NOT in power|NOT the regime|Fighting AGAINST Islamic Republic|Leading resistance from exile}! {Support opposition|Know the facts}! #RezaPahlavi #Opposition",
-            
-            "🎯 WHO KILLS IRANIANS? ❌ {Islamic Republic regime (in power)|Khamenei (Supreme Leader)|IRGC (regime military)|Basij (regime militia)} ✅ WHO FIGHTS FOR FREEDOM? {Reza Pahlavi (opposition leader)|Democratic activists|Iranian people|Protesters risking death}! {Share truth|Educate}! #IranFacts",
-            
-            "{Iranian people|80M Iranians inside Iran|Brave protesters} are {fighting Islamic Republic|resisting brutal regime|demanding freedom} at {cost of their lives|great sacrifice|risk of execution}! {Stand with them|Amplify voices|Support their struggle}! #IranProtests #PeopleVsRegime",
-            
-            "{UN|@UN|United Nations} {must hold Islamic Republic accountable|should prosecute regime leaders|needs to invoke R2P immediately}! {Khamenei = war criminal|Raisi = mass murderer|IRGC = terrorist army}! {Act NOW|Stop massacres|Protect Iranian civilians}! #R2P #IranAccountability",
-            
-            "💪 {Iranian diaspora worldwide|Iranians living abroad|Expats in free countries}: {Expose Islamic Republic crimes|Pressure your governments|Organize protests}! {Support democratic opposition|Back Reza Pahlavi|Demand regime change}! {Your freedom is their weapon|Use your voice|Act}! #IranDiaspora #UseYourVoice",
-            
-            "{Islamic Republic|Mullah theocracy|Khamenei regime} has {ruled Iran with terror since 1979|oppressed Iranians for 45+ years|destroyed generations}! {Time for change is NOW|Revolution is happening|End this nightmare}! {Support democratic transition|Back people's choice}! #RegimeChange #FreeIran",
-            
-            "❤️ {RT if you oppose Islamic Republic|Share if you support Iranian freedom fighters|Like if you want regime change in Iran}! {Every voice amplifies theirs|Your support saves lives|Together we end tyranny}! {Stop the killing|Support democracy|Free Iran NOW}! #IranFreedom #EndIslamicRepublic",
+            # Emotional personal appeal
+            "🩸 {مادران ایران خون گریه می‌کنند|خون فرزندان ایران بر زمین است|زمین ایران از خون جوانانش رنگین شد}! {Islamic Republic has turned Iran into a slaughterhouse|The mullahs' regime massacres its own children|46 years of murder is ENOUGH}! {The time of reckoning has come|Enough blood has been spilled|This regime's end is near}! {Long live|Javid shah} @PahlaviReza 👑\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Diaspora call to action
+            "📢 To every Iranian in exile: {our silence is complicity|we owe it to those dying inside Iran|our brothers and sisters bleed while we watch}! {Rise up wherever you are|Take to the streets of your cities|Make your host country's government hear Iran's cry}! {King Reza Pahlavi|Our King @PahlaviReza|Reza Shah Pahlavi} is the {voice of 85 million Iranians|leader Iranians chose|beacon of Iran's future}!\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Expose regime crimes internationally
+            "⚠️ {BREAKING|URGENT|WORLD MUST KNOW}: {Islamic Republic executed 12 political prisoners last night|IRGC opened fire on protesters in Zahedan AGAIN|Regime tortured teenagers to death in Evin Prison}! {This is genocide against Iranians|These are crimes against humanity|The world can't look away anymore}! We stand with {King Reza Pahlavi|@PahlaviReza} for a {free|democratic|secular} Iran 🇮🇷\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Historical parallel / legitimacy
+            "🇮🇷 {Iran had 2500 years of monarchy & civilization before 1979|The mullahs hijacked our revolution in '79|Islamic Republic was NEVER the choice of Iranians}! {Now the people have spoken|The nation demands its true leader|Iran's destiny is with Pahlavi}! {King Reza Pahlavi|@PahlaviReza} represents {what Iran truly is|the democratic future|our civilizational identity}! {Javid Shah|Long live the King|زنده باد شاه}! 👑\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Women's struggle
+            "💔 {Mahsa Amini was murdered for showing her hair|Armita Geravand was killed at 16 for being free|Nika Shakarami was beaten to death for singing freedom}! The Islamic Republic {murders women daily|has declared war on Iranian women|is the enemy of every woman on earth}! {Iranian women lead this revolution and|Women Life Freedom means|زن زندگی آزادی —} {King Reza Pahlavi|@PahlaviReza} stands with them! 🌹\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Economic devastation + regime blame
+            "📉 Under Islamic Republic: {80% of Iranians live below poverty|Iran's currency lost 99% of its value|regime spent $30B funding Hezbollah while Iranians starve}! {This is not mismanagement—it's THEFT|They rob Iran to fund terror|Mullahs live in palaces while Iran burns}! {King Reza Pahlavi|@PahlaviReza} has a plan for {Iran's prosperity|economic recovery|rebuilding our great nation}! 🦁☀️\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # IRGC terrorism exposure
+            "🔴 IRGC is a {designated terrorist organization|terror army in uniform|the world's largest state-sponsored militia} that {kills Iranians at home and exports terror abroad|massacred 1500+ protesters in Nov 2019|runs drug cartels, executions & proxy wars}! {Every IRGC commander must face The Hague|Sanction them ALL|Disband this criminal army}! {King Reza Pahlavi|@PahlaviReza} will bring justice! ⚖️\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Unity message
+            "🤝 {Kurd, Baluch, Azeri, Lor, Arab, Persian — we are ALL Iran|Every ethnicity, every faith — ONE Iran|From Kurdistan to Sistan, ONE nation}! The Islamic Republic {divides us to rule us|fears our unity more than anything|tried to break us but FAILED}! United behind {King Reza Pahlavi|@PahlaviReza|our King}, {Iran will be free|we are unstoppable|nothing can stop this revolution}! 🇮🇷\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # International community shame
+            "🌍 Dear @UN @EU_Commission @StateDept: {How many more Iranians must die before you act?|You condemned apartheid but ignore Iran's genocide|Your silence enables the massacres}! {Islamic Republic has killed more of its own people than ISIS|1988 massacre, 2019 massacre, 2022 massacre — HOW MANY MORE?|Every dead protester is blood on your hands too}! Support {King Reza Pahlavi|@PahlaviReza} & the Iranian people! 🆘\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Prisoner of conscience
+            "⛓️ RIGHT NOW in {Evin Prison|Rajaei Shahr Prison|regime dungeons}: {political prisoners are being tortured|teenagers await execution|journalists rot for writing truth}! {Toomaj Salehi rapped for freedom — sentenced to death|Narges Mohammadi won Nobel Prize — still imprisoned|Thousands jailed for wanting basic rights}! {King Reza Pahlavi|@PahlaviReza} {demands their freedom|will free them all|fights for every prisoner}! 🕊️\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Revolutionary momentum 2026
+            "🔥 {The revolution is not dead — it's GROWING|2026 is the year of Iran's liberation|Every protest, every tweet, every act of defiance brings us closer}! {Islamic Republic is weaker than ever|Regime is crumbling from within|Khamenei's grip is slipping}! {History is on our side|Iran WILL be free|The countdown has begun}! Stand with {King Reza Pahlavi|@PahlaviReza}! 👑🇮🇷\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Legacy of martyrs
+            "🕯️ I will NEVER forget: {the 16-year-old girl shot in the chest for protesting|the student blinded by IRGC pellets|the mother executed for mourning her son|the child killed on his way to school}! {Their blood is the seed of Iran's freedom tree|Every martyr brings us closer to liberation|They did not die in vain}! {King Reza Pahlavi|@PahlaviReza} carries their legacy! 💐\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Direct challenge to Khamenei
+            "🎯 {Khamenei|The so-called Supreme Leader|Ali Khamenei}: {your time is UP|you cannot massacre your way to survival|history will judge you as the worst tyrant Iran has known}! {Your own military is turning against you|The people have chosen Pahlavi|Even your own supporters are abandoning you}! {King Reza Pahlavi|@PahlaviReza} is coming home and {there's nothing you can do|Iran will be liberated|justice will be served}! ⚖️\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Secular democracy vision
+            "🌅 Imagine Iran where: {women walk free without forced hijab|no one is executed for their beliefs|every ethnicity is celebrated, not persecuted|free press, free internet, free people}! {This is not a dream — this is Reza Pahlavi's vision|This is what we're fighting for|This will be reality}! {King Reza Pahlavi|@PahlaviReza} = {secular democracy|freedom & prosperity|Iran's bright future}! 🇮🇷✨\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Social media mobilization
+            "📱 {Every tweet is a bullet against tyranny|Your RT saves lives inside Iran|This hashtag is the regime's nightmare}! {The mullahs spent $2B on internet censorship — prove them wrong|They block VPNs because they fear YOUR voice|Our digital army is stronger than their propaganda}! {Amplify|Share|Spread the word} for {King Reza Pahlavi|@PahlaviReza} and a free Iran! 🔊\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # November 2019 massacre
+            "🖤 November 2019: Islamic Republic {massacred 1500+ unarmed protesters in 3 days|shut down the internet and slaughtered its people|committed the bloodiest crackdown since 1988}! {Internet was cut so the world wouldn't see|Bodies were hidden, families threatened|They thought we'd forget — WE NEVER WILL}! {King Reza Pahlavi|@PahlaviReza} demands accountability! 🩸\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Environmental destruction
+            "🏜️ Islamic Republic has {dried up Lake Urmia|destroyed Iran's forests|polluted every major river|turned Khuzestan into a dust bowl}! {They don't just kill people — they're killing the LAND|Iran's environment is dying under mullah rule|46 years of ecological catastrophe}! {King Reza Pahlavi|@PahlaviReza} {will restore Iran's natural heritage|has a green recovery plan|cares about Iran's future}! 🌱\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Persian/bilingual emotional
+            "ایران، ای سرزمین مادری! 🇮🇷 {جمهوری اسلامی تو را ویران کرد|آخوندها خاک تو را فروختند|۴۶ سال خون و اشک بس است}! {We will take back our homeland|Iran's liberation is inevitable|The motherland is calling her children}! {King Reza Pahlavi|@PahlaviReza|پادشاه رضا پهلوی} is the answer Iran chose! {جاوید شاه|زنده باد ایران}! 👑\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Sports / cultural pride
+            "⚽ When {Iranian athletes are forced to compete without their flag|our wrestlers must throw matches on regime orders|sports champions are executed for speaking out} — you know the regime fears EVERYTHING Iranian! {Ali Daei stood up|Wrestlers refused to stay silent|Athletes chose Iran over regime}! {King Reza Pahlavi|@PahlaviReza} stands with {Iran's brave athletes|every Iranian hero|those who risk all}! 🏆\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
+
+            # Heartfelt RT request
+            "❤️ If you believe {no government should massacre its own people|freedom is a human right not a privilege|Iran deserves democracy}: {please RT this|share for those who can't speak|be the voice of 85 million silenced Iranians}! {Every share puts pressure on the regime|Your one RT could save a life|Together we are louder than their guns}! {King Reza Pahlavi|@PahlaviReza} 👑🇮🇷\n\n#IranMassacre #IranRevolution2026 #KingRezaPahlavi",
         ]
         
         template = random.choice(templates)

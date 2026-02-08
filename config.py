@@ -896,7 +896,7 @@ A global advocate for Iranian freedom"""
 }
 
 # Twitter hashtags
-TWITTER_HASHTAGS = ['#NationalRevolution1404', '#RezaPahlavi', '#Iran', '#IranRevolution', '#FreeIran']
+TWITTER_HASHTAGS = ['#IranMassacre', '#IranRevolution2026', '#KingRezaPahlavi', '#FreeIran', '#Iran']
 
 # Email Recipients Database (multiple options for each campaign)
 EMAIL_RECIPIENTS = {
