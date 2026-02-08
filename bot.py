@@ -198,70 +198,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Help command - condensed into 2 messages"""
+    """Help command - uses TEXTS from config"""
     
-    # Part 1: Operations (most important)
-    part1 = """❓ *راهنمای سریع*
-
-━━━━━━━━━━━━━━━━━━━━
-
-🎯 *عملیات‌ها و امتیازها:*
-
-📧 *ایمیل* → +500 امتیاز
-   @IRAN_EMAIL_BOT
-
-🌐 *Conduit* → +25 تا +600
-   اشتراک اینترنت با ایرانیان
-
-🐦 *توییت* → +12 امتیاز
-   یک کلیک، یک تاثیر
-
-📋 *گزارش* → +100 امتیاز
-   iranopasmigirim.com
-
-🎬 *ویدیو* → +150 تا +750
-   شهادت به زبان‌های مختلف
-
-🦁 *تجمعات* → +10 تا +40
-   حضور و پاکسازی
-
-━━━━━━━━━━━━━━━━━━━━
-
-📊 *درجات (12 سطح):*
-🥉 سرباز → 🥈 ستوان → 🥇 سرگرد → 🎖️ سرتیپ → 💎 سرلشکر → 👑 مارشال"""
-
-    # Part 2: Gamification & rewards
-    part2 = """🔥 *سیستم پاداش:*
-
-⚡ *رگه روزانه:*
-7 روز متوالی = ضریب 1.25x
-30 روز = ضریب 1.5x
-
-🎁 *کمبوی روزانه:*
-3+ فعالیت در روز = امتیاز اضافی
-
-🏆 *گواهینامه:*
-هر ارتقای درجه = گواهی دیجیتال
-
-🏅 *پاداش فیزیکی:*
-درجات بالا = مدال در روز آزادی!
-
-━━━━━━━━━━━━━━━━━━━━
-
-💎 *دستورات:*
-/my_certificates
-/my_rank_card  
-/my_impact
-
-✊ برای پیروزی! 🦁☀️"""
-
     try:
         await update.message.reply_text(
-            part1,
+            TEXTS['help'],
             parse_mode='Markdown',
             reply_markup=get_main_keyboard()
         )
-        await update.message.reply_text(part2, parse_mode='Markdown')
     except Exception as e:
         logger.error(f"Error sending help message: {e}")
         # Fallback: send without markdown
