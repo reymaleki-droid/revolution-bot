@@ -287,6 +287,21 @@ class SecureDatabase:
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_certificates_user ON certificates(user_hash)')
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_rate_limits_action ON rate_limits(action)')
             
+            # Pending submissions (video/gathering) - persisted across restarts
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS pending_submissions (
+                    token TEXT PRIMARY KEY,
+                    submission_type TEXT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    links TEXT,
+                    category TEXT,
+                    reward INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ''')
+            await conn.execute('CREATE INDEX IF NOT EXISTS idx_submissions_status ON pending_submissions(status)')
+            
             # Initialize default stats
             default_stats = [
                 ('total_users', '0'),
@@ -897,6 +912,37 @@ class SecureDatabase:
             ''', user_hash, datetime.now(timezone.utc))
             await self._increment_stat(conn, 'total_protests', 1)
     
+    # ==================== SUBMISSIONS ====================
+    
+    async def add_submission(self, token: str, submission_type: str, user_id: int,
+                            links: str, category: str, reward: int) -> None:
+        """Store a pending submission (video or gathering) in the database."""
+        async with self._acquire() as conn:
+            await conn.execute('''
+                INSERT INTO pending_submissions (token, submission_type, user_id, links, category, reward)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (token) DO NOTHING
+            ''', token, submission_type, user_id, links, category, reward)
+    
+    async def get_submission(self, token: str) -> Optional[Dict]:
+        """Get a pending submission by token."""
+        async with self._acquire() as conn:
+            row = await conn.fetchrow('''
+                SELECT token, submission_type, user_id, links, category, reward, status
+                FROM pending_submissions WHERE token = $1 AND status = 'pending'
+            ''', token)
+            if row:
+                return dict(row)
+            return None
+    
+    async def resolve_submission(self, token: str, status: str) -> bool:
+        """Mark a submission as approved or rejected."""
+        async with self._acquire() as conn:
+            result = await conn.execute('''
+                UPDATE pending_submissions SET status = $1 WHERE token = $2 AND status = 'pending'
+            ''', status, token)
+            return result and 'UPDATE 1' in result
+
     # ==================== RETENTION ====================
     
     async def cleanup_old_action_logs(self, days: int = None) -> int:

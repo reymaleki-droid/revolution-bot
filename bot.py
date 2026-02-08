@@ -2116,17 +2116,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Generate anonymous submission token
             submission_token = secrets.token_hex(8)
 
-            # Store submission
-            if 'video_submissions' not in context.bot_data:
-                context.bot_data['video_submissions'] = {}
-
-            context.bot_data['video_submissions'][submission_token] = {
-                'user_id': user.id,
-                'links': links,
-                'type': submission_type,
-                'reward': reward,
-                'timestamp': datetime.now().isoformat()
-            }
+            # Store submission in database (persists across restarts)
+            await db.add_submission(
+                token=submission_token,
+                submission_type='video',
+                user_id=user.id,
+                links=links,
+                category=submission_type,
+                reward=reward
+            )
 
             # Send to admin for verification
             type_names = {
@@ -2201,16 +2199,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Generate anonymous submission token
             submission_token = secrets.token_hex(8)
 
-            # Store submission with token (not in database, just in
-            # memory/context)
-            if 'gathering_submissions' not in context.bot_data:
-                context.bot_data['gathering_submissions'] = {}
-
-            context.bot_data['gathering_submissions'][submission_token] = {
-                'user_id': user.id,
-                'link': link,
-                'timestamp': datetime.now().isoformat()
-            }
+            # Store submission in database (persists across restarts)
+            await db.add_submission(
+                token=submission_token,
+                submission_type='gathering',
+                user_id=user.id,
+                links=link,
+                category='gathering',
+                reward=0
+            )
 
             # Send to admin for verification
             admin_ids = ADMIN_IDS
@@ -2475,15 +2472,15 @@ async def approve_video_command(
 
     submission_token = context.args[0]
 
-    # Get submission data
-    if 'video_submissions' not in context.bot_data or submission_token not in context.bot_data['video_submissions']:
+    # Get submission data from database
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'video':
         await update.message.reply_text("❌ شناسه نامعتبر یا منقضی شده است.")
         return
 
-    submission = context.bot_data['video_submissions'][submission_token]
     requester_id = submission['user_id']
     reward = submission['reward']
-    submission_type = submission['type']
+    submission_type = submission['category']
     links = submission['links']
 
     try:
@@ -2504,8 +2501,8 @@ async def approve_video_command(
             parse_mode='Markdown'
         )
 
-        # Remove from pending submissions
-        del context.bot_data['video_submissions'][submission_token]
+        # Mark as approved in database
+        await db.resolve_submission(submission_token, 'approved')
 
         await update.message.reply_text(
             f"✅ ویدیو با شناسه `{submission_token}` تایید شد.\n\n"
@@ -2536,12 +2533,12 @@ async def reject_video_command(
 
     submission_token = context.args[0]
 
-    # Get submission data
-    if 'video_submissions' not in context.bot_data or submission_token not in context.bot_data['video_submissions']:
+    # Get submission data from database
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'video':
         await update.message.reply_text("❌ شناسه نامعتبر یا منقضی شده است.")
         return
 
-    submission = context.bot_data['video_submissions'][submission_token]
     requester_id = submission['user_id']
     links = submission['links']
 
@@ -2560,8 +2557,8 @@ async def reject_video_command(
             parse_mode='Markdown'
         )
 
-        # Remove from pending submissions
-        del context.bot_data['video_submissions'][submission_token]
+        # Mark as rejected in database
+        await db.resolve_submission(submission_token, 'rejected')
 
         await update.message.reply_text(
             f"❌ ویدیو با شناسه `{submission_token}` رد شد.\n\n"
@@ -2593,15 +2590,14 @@ async def approve_gathering_command(
 
     submission_token = context.args[0]
 
-    # Get submission data
-    if 'gathering_submissions' not in context.bot_data or submission_token not in context.bot_data[
-            'gathering_submissions']:
+    # Get submission data from database
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'gathering':
         await update.message.reply_text("❌ شناسه نامعتبر یا منقضی شده است.")
         return
 
-    submission = context.bot_data['gathering_submissions'][submission_token]
     requester_id = submission['user_id']
-    link = submission['link']
+    link = submission['links']
 
     try:
         # Notify the user
@@ -2613,8 +2609,8 @@ async def approve_gathering_command(
             parse_mode='Markdown'
         )
 
-        # Remove from pending submissions
-        del context.bot_data['gathering_submissions'][submission_token]
+        # Mark as approved in database
+        await db.resolve_submission(submission_token, 'approved')
 
         await update.message.reply_text(
             f"✅ تجمع با شناسه `{submission_token}` تایید شد.\n\n"
@@ -2647,15 +2643,14 @@ async def reject_gathering_command(
 
     submission_token = context.args[0]
 
-    # Get submission data
-    if 'gathering_submissions' not in context.bot_data or submission_token not in context.bot_data[
-            'gathering_submissions']:
+    # Get submission data from database
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'gathering':
         await update.message.reply_text("❌ شناسه نامعتبر یا منقضی شده است.")
         return
 
-    submission = context.bot_data['gathering_submissions'][submission_token]
     requester_id = submission['user_id']
-    link = submission['link']
+    link = submission['links']
 
     try:
         # Notify the user
@@ -2671,8 +2666,8 @@ async def reject_gathering_command(
             parse_mode='Markdown'
         )
 
-        # Remove from pending submissions
-        del context.bot_data['gathering_submissions'][submission_token]
+        # Mark as rejected in database
+        await db.resolve_submission(submission_token, 'rejected')
 
         await update.message.reply_text(
             f"❌ تجمع با شناسه `{submission_token}` رد شد.\n\n"
