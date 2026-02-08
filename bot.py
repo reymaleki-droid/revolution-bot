@@ -1199,12 +1199,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     VALID_PREFIXES = (
         'video_', 'email_sent_', 'conduit_confirm_', 'conduit_tier_',
         'protest_country_', 'protest_event_', 'protest_attend_', 'protest_org_',
-        'protest_feb14_'
+        'protest_feb14_',
+        'approve_video_', 'reject_video_', 'approve_gathering_', 'reject_gathering_'
     )
     
     if data not in VALID_CALLBACKS and not any(data.startswith(p) for p in VALID_PREFIXES):
         logger.warning(f"Invalid callback data received: {data[:50]}")
         await query.answer("خطا: داده نامعتبر", show_alert=True)
+        return
+
+    # Handle approve/reject inline buttons
+    if data.startswith('approve_video_'):
+        token = data[len('approve_video_'):]
+        await _handle_approve_video_callback(query, context, token)
+        return
+    elif data.startswith('reject_video_'):
+        token = data[len('reject_video_'):]
+        await _handle_reject_video_callback(query, context, token)
+        return
+    elif data.startswith('approve_gathering_'):
+        token = data[len('approve_gathering_'):]
+        await _handle_approve_gathering_callback(query, context, token)
+        return
+    elif data.startswith('reject_gathering_'):
+        token = data[len('reject_gathering_'):]
+        await _handle_reject_gathering_callback(query, context, token)
         return
 
     if data == "main_menu":
@@ -2146,14 +2165,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ⚠️ *نکته امنیتی:*
 هویت کاربر محفوظ است - شما نمی‌توانید او را شناسایی کنید.
-فقط محتوای ویدیو را بررسی کنید.
+فقط محتوای ویدیو را بررسی کنید."""
 
-✅ تایید: /approvevideo {submission_token}
-❌ رد: /rejectvideo {submission_token}"""
+            approve_keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ تایید", callback_data=f"approve_video_{submission_token}"),
+                    InlineKeyboardButton("❌ رد", callback_data=f"reject_video_{submission_token}")
+                ]
+            ])
 
             for admin_id in ADMIN_IDS:
                 try:
-                    await context.bot.send_message(admin_id, verification_msg, parse_mode='Markdown')
+                    await context.bot.send_message(admin_id, verification_msg, parse_mode='Markdown', reply_markup=approve_keyboard)
                 except BaseException:
                     pass
 
@@ -2217,15 +2240,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔐 شناسه ناشناس: `{submission_token}`
 🔗 لینک: {link}
 
-⚠️ هویت کاربر محفوظ است - شما نمی‌توانید او را شناسایی کنید
+⚠️ هویت کاربر محفوظ است - شما نمی‌توانید او را شناسایی کنید"""
 
-برای تایید این تجمع از دستورات زیر استفاده کنید:
-✅ /approvegathering {submission_token}
-❌ /rejectgathering {submission_token}"""
+            approve_keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ تایید", callback_data=f"approve_gathering_{submission_token}"),
+                    InlineKeyboardButton("❌ رد", callback_data=f"reject_gathering_{submission_token}")
+                ]
+            ])
 
             for admin_id in admin_ids:
                 try:
-                    await context.bot.send_message(admin_id, verification_msg, parse_mode='Markdown')
+                    await context.bot.send_message(admin_id, verification_msg, parse_mode='Markdown', reply_markup=approve_keyboard)
                 except BaseException:
                     pass
 
@@ -2454,6 +2480,180 @@ async def delete_my_data_command(
     await update.message.reply_text(message, parse_mode='Markdown')
     logger.info(
         "User requested data deletion (points preserved, identity protected)")
+
+
+async def _handle_approve_video_callback(query, context, submission_token):
+    """Handle inline button callback for approving video"""
+    user_id = query.from_user.id
+    if user_id not in ADMIN_IDS:
+        await query.answer("⛔ فقط مدیران", show_alert=True)
+        return
+
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'video':
+        await query.edit_message_text("❌ شناسه نامعتبر یا قبلاً پردازش شده است.")
+        return
+
+    requester_id = submission['user_id']
+    reward = submission['reward']
+    submission_type = submission['category']
+    links = submission['links']
+
+    try:
+        cert_data = await db.add_points(requester_id, reward, submission_type)
+        stats = await db.get_user_stats(requester_id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
+
+        await context.bot.send_message(
+            requester_id,
+            f"✅ *ویدیوی شما تایید شد!*\n\n"
+            f"🎉 پاداش: *{reward} امتیاز*\n\n"
+            f"💎 امتیاز کل: {new_score:,}\n"
+            f"🎖️ درجه: {new_role}\n\n"
+            f"🌍 ممنون که صدای ایران آزاد را به جهان رساندید! 🦁☀️",
+            parse_mode='Markdown'
+        )
+
+        await db.resolve_submission(submission_token, 'approved')
+
+        await query.edit_message_text(
+            f"✅ ویدیو با شناسه `{submission_token}` تایید شد.\n\n"
+            f"💰 {reward} امتیاز به کاربر ناشناس اضافه شد.\n\n"
+            f"🔗 لینک(ها):\n{links}",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Admin (identity protected) approved video {submission_token} via button")
+
+    except Exception as e:
+        logger.error(f"Error approving video via callback: {e}", exc_info=True)
+        await query.answer("❌ خطایی رخ داد", show_alert=True)
+
+
+async def _handle_reject_video_callback(query, context, submission_token):
+    """Handle inline button callback for rejecting video"""
+    user_id = query.from_user.id
+    if user_id not in ADMIN_IDS:
+        await query.answer("⛔ فقط مدیران", show_alert=True)
+        return
+
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'video':
+        await query.edit_message_text("❌ شناسه نامعتبر یا قبلاً پردازش شده است.")
+        return
+
+    requester_id = submission['user_id']
+    links = submission['links']
+
+    try:
+        await context.bot.send_message(
+            requester_id,
+            "❌ *ویدیوی شما تایید نشد*\n\n"
+            "متأسفانه محتوای ارسالی شما مطابق با الزامات نبود.\n\n"
+            "لطفاً مطمئن شوید که:\n"
+            "• ویدیو واقعی و با چهره شماست\n"
+            "• محتوا در حمایت از ایران آزاد است\n"
+            "• کیفیت ویدیو مناسب است\n"
+            "• در پلتفرم اصلی منتشر شده است\n\n"
+            "می‌توانید دوباره تلاش کنید.",
+            parse_mode='Markdown'
+        )
+
+        await db.resolve_submission(submission_token, 'rejected')
+
+        await query.edit_message_text(
+            f"❌ ویدیو با شناسه `{submission_token}` رد شد.\n\n"
+            f"🔗 لینک(ها):\n{links}\n\n"
+            f"کاربر ناشناس مطلع شد.",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Admin (identity protected) rejected video {submission_token} via button")
+
+    except Exception as e:
+        logger.error(f"Error rejecting video via callback: {e}", exc_info=True)
+        await query.answer("❌ خطایی رخ داد", show_alert=True)
+
+
+async def _handle_approve_gathering_callback(query, context, submission_token):
+    """Handle inline button callback for approving gathering"""
+    user_id = query.from_user.id
+    if user_id not in ADMIN_IDS:
+        await query.answer("⛔ فقط مدیران", show_alert=True)
+        return
+
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'gathering':
+        await query.edit_message_text("❌ شناسه نامعتبر یا قبلاً پردازش شده است.")
+        return
+
+    requester_id = submission['user_id']
+    link = submission['links']
+
+    try:
+        await context.bot.send_message(
+            requester_id,
+            "✅ *تجمع شما تایید شد!*\n\n"
+            "تجمع شما در تقویم قرار گرفت و همه کاربران می‌توانند آن را ببینند.\n\n"
+            "از شما برای سازماندهی متشکریم! 🦁☀️",
+            parse_mode='Markdown'
+        )
+
+        await db.resolve_submission(submission_token, 'approved')
+
+        await query.edit_message_text(
+            f"✅ تجمع با شناسه `{submission_token}` تایید شد.\n\n"
+            f"لینک: {link}\n\n"
+            f"کاربر ناشناس به او اطلاع داده شد.",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Admin (identity protected) approved gathering {submission_token} via button")
+
+    except Exception as e:
+        logger.error(f"Error approving gathering via callback: {e}", exc_info=True)
+        await query.answer("❌ خطایی رخ داد", show_alert=True)
+
+
+async def _handle_reject_gathering_callback(query, context, submission_token):
+    """Handle inline button callback for rejecting gathering"""
+    user_id = query.from_user.id
+    if user_id not in ADMIN_IDS:
+        await query.answer("⛔ فقط مدیران", show_alert=True)
+        return
+
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'gathering':
+        await query.edit_message_text("❌ شناسه نامعتبر یا قبلاً پردازش شده است.")
+        return
+
+    requester_id = submission['user_id']
+    link = submission['links']
+
+    try:
+        await context.bot.send_message(
+            requester_id,
+            "❌ *درخواست تجمع رد شد*\n\n"
+            "متأسفانه لینک ارسالی شما تایید نشد.\n\n"
+            "لطفاً مطمئن شوید که:\n"
+            "• لینک از یک اینفلوئنسر معتبر است\n"
+            "• اطلاعات تجمع واضح است\n"
+            "• تجمع در راستای انقلاب ملی ۱۴۰۴ است\n\n"
+            "می‌توانید دوباره تلاش کنید.",
+            parse_mode='Markdown'
+        )
+
+        await db.resolve_submission(submission_token, 'rejected')
+
+        await query.edit_message_text(
+            f"❌ تجمع با شناسه `{submission_token}` رد شد.\n\n"
+            f"لینک: {link}\n\n"
+            f"کاربر ناشناس به او اطلاع داده شد.",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Admin (identity protected) rejected gathering {submission_token} via button")
+
+    except Exception as e:
+        logger.error(f"Error rejecting gathering via callback: {e}", exc_info=True)
+        await query.answer("❌ خطایی رخ داد", show_alert=True)
 
 
 async def approve_video_command(
