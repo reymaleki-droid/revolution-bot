@@ -933,7 +933,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     VALID_PREFIXES = (
         'video_', 'email_sent_', 'conduit_confirm_', 'conduit_tier_',
-        'protest_country_', 'protest_event_', 'protest_attend_', 'protest_org_'
+        'protest_country_', 'protest_event_', 'protest_attend_', 'protest_org_',
+        'protest_feb14_'
     )
     
     if data not in VALID_CALLBACKS and not any(data.startswith(p) for p in VALID_PREFIXES):
