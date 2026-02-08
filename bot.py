@@ -1332,21 +1332,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Netherlands",
                 "Austria"]
 
-            keyboard = []
-            for country in countries:
-                keyboard.append([InlineKeyboardButton(
-                    f"🌍 {country}", callback_data=f"protest_country_{country}")])
+        keyboard = []
+        for country in countries:
             keyboard.append([InlineKeyboardButton(
-                "➕ ثبت تجمعات جدید", callback_data="protest_create_new")])
-            keyboard.append([InlineKeyboardButton(
-                "🔙 بازگشت", callback_data="protests_menu")])
+                f"🌍 {country}", callback_data=f"protest_country_{country}")])
+        keyboard.append([InlineKeyboardButton(
+            "➕ ثبت تجمعات جدید", callback_data="protest_create_new")])
+        keyboard.append([InlineKeyboardButton(
+            "🔙 بازگشت", callback_data="protests_menu")])
 
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                TEXTS['protest_calendar_intro'],
-                parse_mode='Markdown',
-                reply_markup=reply_markup
-            )
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            TEXTS['protest_calendar_intro'],
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
 
     elif data.startswith("protest_country_"):
         country = data.replace("protest_country_", "")
