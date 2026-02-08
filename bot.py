@@ -2148,8 +2148,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 هویت کاربر محفوظ است - شما نمی‌توانید او را شناسایی کنید.
 فقط محتوای ویدیو را بررسی کنید.
 
-✅ تایید: /approve_video {submission_token}
-❌ رد: /reject_video {submission_token}"""
+✅ تایید: /approvevideo {submission_token}
+❌ رد: /rejectvideo {submission_token}"""
 
             for admin_id in ADMIN_IDS:
                 try:
@@ -2220,8 +2220,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ⚠️ هویت کاربر محفوظ است - شما نمی‌توانید او را شناسایی کنید
 
 برای تایید این تجمع از دستورات زیر استفاده کنید:
-✅ /approve_gathering {submission_token}
-❌ /reject_gathering {submission_token}"""
+✅ /approvegathering {submission_token}
+❌ /rejectgathering {submission_token}"""
 
             for admin_id in admin_ids:
                 try:
@@ -2467,7 +2467,7 @@ async def approve_video_command(
         return
 
     if not context.args or len(context.args) < 1:
-        await update.message.reply_text("❌ استفاده: /approve_video [submission_token]")
+        await update.message.reply_text("❌ استفاده: /approvevideo [submission_token]")
         return
 
     submission_token = context.args[0]
@@ -2528,7 +2528,7 @@ async def reject_video_command(
         return
 
     if not context.args or len(context.args) < 1:
-        await update.message.reply_text("❌ استفاده: /reject_video [submission_token]")
+        await update.message.reply_text("❌ استفاده: /rejectvideo [submission_token]")
         return
 
     submission_token = context.args[0]
@@ -2585,7 +2585,7 @@ async def approve_gathering_command(
         return
 
     if not context.args or len(context.args) < 1:
-        await update.message.reply_text("❌ استفاده: /approve_gathering [submission_token]")
+        await update.message.reply_text("❌ استفاده: /approvegathering [submission_token]")
         return
 
     submission_token = context.args[0]
@@ -2638,7 +2638,7 @@ async def reject_gathering_command(
         return
 
     if not context.args or len(context.args) < 1:
-        await update.message.reply_text("❌ استفاده: /reject_gathering [submission_token]")
+        await update.message.reply_text("❌ استفاده: /rejectgathering [submission_token]")
         return
 
     submission_token = context.args[0]
@@ -2940,19 +2940,19 @@ def main():
             export_stats_command))
     application.add_handler(
         CommandHandler(
-            "approve_video",
+            "approvevideo",
             approve_video_command))
     application.add_handler(
         CommandHandler(
-            "reject_video",
+            "rejectvideo",
             reject_video_command))
     application.add_handler(
         CommandHandler(
-            "approve_gathering",
+            "approvegathering",
             approve_gathering_command))
     application.add_handler(
         CommandHandler(
-            "reject_gathering",
+            "rejectgathering",
             reject_gathering_command))
 
     # User privacy commands
