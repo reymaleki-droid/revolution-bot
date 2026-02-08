@@ -594,6 +594,111 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle video uploads - strip metadata for security"""
     user = update.effective_user
 
+    # Check for flower gifting video upload
+    if context.user_data.get('awaiting_flower_photo', False):
+        video = update.message.video
+        await db.add_protest_media(
+            user.id,
+            country="Unknown",
+            city="Unknown",
+            media_type='video',
+            file_id=video.file_id,
+            caption="flower_gifting"
+        )
+
+        cert_data = await db.add_points(user.id, 15, 'flower_gifting')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
+
+        await update.message.reply_text(
+            "🌹 *عالی! ویدیوی تقدیم گل ثبت شد!*\n\n"
+            "+۱۵ امتیاز دریافت کردید! 🏆\n\n"
+            "ممنون که با مهربانی و عشق پیام ایران آزاد را منتقل می‌کنید.\n\n"
+            "💪 *ما نفرت نمی‌آوریم، عشق می‌آوریم!* 🦁☀️",
+            parse_mode='Markdown',
+            reply_markup=get_main_keyboard()
+        )
+
+        if cert_data:
+            await send_certificate_notification(update, cert_data)
+
+        context.user_data['awaiting_flower_photo'] = False
+        return
+
+    # Check for cleanup video upload
+    if context.user_data.get('awaiting_cleanup_photo', False):
+        video = update.message.video
+        cleanup_step = context.user_data.get('cleanup_step')
+
+        if cleanup_step == 'before_photo':
+            context.user_data['cleanup_before_photo'] = video.file_id
+            context.user_data['cleanup_step'] = 'after_photo'
+
+            await update.message.reply_text(
+                TEXTS['cleanup_photo_after'],
+                parse_mode='Markdown'
+            )
+            return
+
+        elif cleanup_step == 'after_photo':
+            await db.add_cleanup_action(
+                user.id,
+                country="Unknown",
+                city="Unknown",
+                media_type='video',
+                file_id=video.file_id,
+                caption=None
+            )
+
+            cert_data = await db.add_points(user.id, POINTS['protest_cleanup'], 'protest_cleanup')
+            stats = await db.get_user_stats(user.id)
+            new_score = stats['imtiaz']
+            new_role = stats['role']
+
+            await update.message.reply_text(
+                TEXTS['cleanup_completed'].format(points=POINTS['protest_cleanup']),
+                parse_mode='Markdown',
+                reply_markup=get_main_keyboard()
+            )
+
+            if cert_data:
+                await send_certificate_notification(update, cert_data)
+
+            context.user_data['awaiting_cleanup_photo'] = False
+            context.user_data['cleanup_step'] = None
+            context.user_data['cleanup_before_photo'] = None
+            return
+
+    # Check for protest media video upload
+    if context.user_data.get('awaiting_protest_media', False):
+        video = update.message.video
+        await db.add_protest_media(
+            user.id,
+            country="Unknown",
+            city="Unknown",
+            media_type='video',
+            file_id=video.file_id,
+            caption=update.message.caption
+        )
+
+        cert_data = await db.add_points(user.id, POINTS['protest_media_shared'], 'protest_media_shared')
+        stats = await db.get_user_stats(user.id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
+
+        await update.message.reply_text(
+            TEXTS['protest_media_received'].format(points=POINTS['protest_media_shared']),
+            parse_mode='Markdown',
+            reply_markup=get_main_keyboard()
+        )
+
+        if cert_data:
+            await send_certificate_notification(update, cert_data)
+
+        context.user_data['awaiting_protest_media'] = False
+        return
+
     # Check if user is in media submission flow
     if not context.user_data.get('awaiting_media', False):
         await update.message.reply_text(
