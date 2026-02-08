@@ -809,6 +809,10 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"درجه: {new_role}",
             reply_markup=get_main_keyboard()
         )
+
+        # Forward to archive channel
+        video = update.message.video
+        await forward_to_archive(context, 'video', video.file_id, "🎬 شهادت جهانی - Testimony Video")
         
         # Send certificate if rank changed
         if cert_data:
@@ -862,6 +866,9 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ),
                 parse_mode='Markdown'
             )
+
+        # Forward original to archive channel
+        await forward_to_archive(context, 'video', video.file_id, "🎬 شهادت جهانی - Testimony Video")
 
         context.user_data['awaiting_media'] = False
 
