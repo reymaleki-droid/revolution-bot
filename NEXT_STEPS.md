@@ -102,7 +102,7 @@ python bot.py
 
 You should see:
 ```
-INFO - Bot started successfully! 🇮🇷
+INFO - Bot started successfully! 🦁☀️
 ```
 
 ---
@@ -237,7 +237,7 @@ docker run -d --restart always revolution-bot
 
 ---
 
-## 🇮🇷 Ready to Launch!
+## 🦁☀️ Ready to Launch!
 
 Once you complete Steps 2-4 above, run:
 
@@ -255,4 +255,4 @@ For detailed documentation, see:
 
 **Questions?** Check the README or open an issue.
 
-**پیروزی با ماست! 🇮🇷**
+**پیروزی با ماست! 🦁☀️**

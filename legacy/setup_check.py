@@ -101,7 +101,7 @@ def create_database():
 def main():
     """Run all checks"""
     print("=" * 60)
-    print("🇮🇷 National Revolution 1404 Bot - Setup Verification")
+    print("🦁☀️ National Revolution 1404 Bot - Setup Verification")
     print("=" * 60)
     
     checks = [

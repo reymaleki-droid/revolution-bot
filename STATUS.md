@@ -74,7 +74,7 @@ Follow **[NEXT_STEPS.md](NEXT_STEPS.md)** for detailed instructions.
 ```
 سلام عزیز! 👋
 
-به ارتش دیجیتال انقلاب ملی ۱۴۰۴ خوش آمدید! 🇮🇷
+به ارتش دیجیتال انقلاب ملی ۱۴۰۴ خوش آمدید! 🦁☀️
 ```
 
 ### Main Menu Buttons
@@ -213,7 +213,7 @@ See [README.md](README.md) for deployment guides.
 You'll know it's working when:
 
 1. ✅ Run `python bot.py` → No errors
-2. ✅ See: "Bot started successfully! 🇮🇷"
+2. ✅ See: "Bot started successfully! 🦁☀️"
 3. ✅ Open bot in Telegram
 4. ✅ Send `/start`
 5. ✅ See Persian welcome message
@@ -231,7 +231,7 @@ If stuck:
 
 ---
 
-## 🇮🇷 For Iranian Freedom
+## 🦁☀️ For Iranian Freedom
 
 **انقلاب ملی ۱۴۰۴**
 

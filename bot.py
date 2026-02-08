@@ -51,6 +51,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def check_media_cooldown(user_id, action_type, cooldown_minutes=10):
+    """SEC-007: Rate limit media uploads to prevent point farming.
+    Returns (allowed: bool, remaining_minutes: int)"""
+    user_hash = db.get_user_hash(user_id)
+    last_action = await db.get_last_action(user_hash, action_type)
+    if last_action:
+        now = datetime.now(timezone.utc)
+        time_since = now - last_action
+        if time_since < timedelta(minutes=cooldown_minutes):
+            remaining = timedelta(minutes=cooldown_minutes) - time_since
+            return False, int(remaining.total_seconds() // 60) + 1
+    return True, 0
+
+
+async def set_media_cooldown(user_id, action_type):
+    """Set media cooldown after successful upload"""
+    user_hash = db.get_user_hash(user_id)
+    await db.set_last_action(user_hash, action_type)
+
+
 async def forward_to_archive(context, media_type, file_id, caption=""):
     """Forward media to archive channel for documentation"""
     if not MEDIA_CHANNEL_ID:
@@ -612,6 +632,15 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check for flower gifting video upload
     if context.user_data.get('awaiting_flower_photo', False):
         video = update.message.video
+        # SEC-007: Rate limit to prevent point farming
+        allowed, remaining = await check_media_cooldown(user.id, 'flower_media')
+        if not allowed:
+            await update.message.reply_text(
+                f"⏰ لطفاً {remaining} دقیقه دیگر صبر کنید.",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data['awaiting_flower_photo'] = False
+            return
         await db.add_protest_media(
             user.id,
             country="Unknown",
@@ -637,6 +666,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Forward to archive channel
         await forward_to_archive(context, 'video', video.file_id, "🌹 تقدیم گل - Flower Gifting")
+        await set_media_cooldown(user.id, 'flower_media')
 
         if cert_data:
             await send_certificate_notification(update, cert_data)
@@ -660,6 +690,16 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         elif cleanup_step == 'after_photo':
+            # SEC-007: Rate limit cleanup uploads
+            allowed, remaining = await check_media_cooldown(user.id, 'cleanup_media')
+            if not allowed:
+                await update.message.reply_text(
+                    f"⏰ لطفاً {remaining} دقیقه دیگر صبر کنید.",
+                    reply_markup=get_main_keyboard()
+                )
+                context.user_data['awaiting_cleanup_photo'] = False
+                context.user_data['cleanup_step'] = None
+                return
             await db.add_cleanup_action(
                 user.id,
                 country="Unknown",
@@ -685,6 +725,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if before_id:
                 await forward_to_archive(context, 'video', before_id, "🧹 پاکسازی - قبل / Cleanup Before")
             await forward_to_archive(context, 'video', video.file_id, "🧹 پاکسازی - بعد / Cleanup After")
+            await set_media_cooldown(user.id, 'cleanup_media')
 
             if cert_data:
                 await send_certificate_notification(update, cert_data)
@@ -697,6 +738,15 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check for protest media video upload
     if context.user_data.get('awaiting_protest_media', False):
         video = update.message.video
+        # SEC-007: Rate limit to prevent point farming
+        allowed, remaining = await check_media_cooldown(user.id, 'protest_media')
+        if not allowed:
+            await update.message.reply_text(
+                f"⏰ لطفاً {remaining} دقیقه دیگر صبر کنید.",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data['awaiting_protest_media'] = False
+            return
         await db.add_protest_media(
             user.id,
             country="Unknown",
@@ -719,6 +769,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Forward to archive channel
         await forward_to_archive(context, 'video', video.file_id, "📸 مستندات تجمع - Protest Media")
+        await set_media_cooldown(user.id, 'protest_media')
 
         if cert_data:
             await send_certificate_notification(update, cert_data)
@@ -839,6 +890,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check for flower gifting photo upload
     if context.user_data.get('awaiting_flower_photo', False):
+        # SEC-007: Rate limit to prevent point farming
+        allowed, remaining = await check_media_cooldown(user.id, 'flower_media')
+        if not allowed:
+            await update.message.reply_text(
+                f"⏰ لطفاً {remaining} دقیقه دیگر صبر کنید.",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data['awaiting_flower_photo'] = False
+            return
         await db.add_protest_media(
             user.id,
             country="Unknown",
@@ -864,6 +924,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Forward to archive channel
         await forward_to_archive(context, 'photo', photo.file_id, "🌹 تقدیم گل - Flower Gifting")
+        await set_media_cooldown(user.id, 'flower_media')
 
         if cert_data:
             await send_certificate_notification(update, cert_data)
@@ -887,6 +948,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif cleanup_step == 'after_photo':
             before_photo_id = context.user_data.get('cleanup_before_photo')
             after_photo_id = photo.file_id
+
+            # SEC-007: Rate limit cleanup uploads
+            allowed, remaining = await check_media_cooldown(user.id, 'cleanup_media')
+            if not allowed:
+                await update.message.reply_text(
+                    f"⏰ لطفاً {remaining} دقیقه دیگر صبر کنید.",
+                    reply_markup=get_main_keyboard()
+                )
+                context.user_data['awaiting_cleanup_photo'] = False
+                context.user_data['cleanup_step'] = None
+                return
 
             # Save to database (user will provide location later)
             await db.add_cleanup_action(
@@ -914,6 +986,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if before_photo_id:
                 await forward_to_archive(context, 'photo', before_photo_id, "🧹 پاکسازی - قبل / Cleanup Before")
             await forward_to_archive(context, 'photo', after_photo_id, "🧹 پاکسازی - بعد / Cleanup After")
+            await set_media_cooldown(user.id, 'cleanup_media')
             
             # Send certificate if rank changed
             if cert_data:
@@ -926,6 +999,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check for protest media upload
     elif context.user_data.get('awaiting_protest_media', False):
+        # SEC-007: Rate limit to prevent point farming
+        allowed, remaining = await check_media_cooldown(user.id, 'protest_media')
+        if not allowed:
+            await update.message.reply_text(
+                f"⏰ لطفاً {remaining} دقیقه دیگر صبر کنید.",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data['awaiting_protest_media'] = False
+            return
         await db.add_protest_media(
             user.id,
             country="Unknown",
@@ -948,6 +1030,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Forward to archive channel
         await forward_to_archive(context, 'photo', photo.file_id, "📸 مستندات تجمع - Protest Media")
+        await set_media_cooldown(user.id, 'protest_media')
         
         # Send certificate if rank changed
         if cert_data:
@@ -1615,7 +1698,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data.startswith("protest_event_"):
-        event_id = int(data.replace("protest_event_", ""))
+        try:
+            event_id = int(data.replace("protest_event_", ""))
+        except ValueError:
+            await query.answer("❓", show_alert=False)
+            return
         event = await db.get_protest_event(event_id)
 
         if event:
@@ -1643,7 +1730,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
     elif data.startswith("protest_attend_"):
-        event_id = int(data.replace("protest_attend_", ""))
+        try:
+            event_id = int(data.replace("protest_attend_", ""))
+        except ValueError:
+            await query.answer("❓", show_alert=False)
+            return
         success = await db.mark_protest_attendance(event_id, user.id)
 
         if success:

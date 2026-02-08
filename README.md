@@ -1,4 +1,4 @@
-# 🇮🇷 Telegram Bot - National Revolution 1404
+# 🦁☀️ Telegram Bot - National Revolution 1404
 
 **ارتش دیجیتال انقلاب ملی ۱۴۰۴**
 
@@ -194,7 +194,7 @@ python bot.py
 
 You should see:
 ```
-INFO - Bot started successfully! 🇮🇷
+INFO - Bot started successfully! 🦁☀️
 ```
 
 ---
@@ -566,7 +566,7 @@ MIT License - See LICENSE file for details
 
 ---
 
-## 🇮🇷 For the Freedom of Iran
+## 🦁☀️ For the Freedom of Iran
 
 **انقلاب ملی ۱۴۰۴**
 

@@ -15,7 +15,7 @@ These actions are **strictly prohibited** and will result in immediate PR reject
 | Forbidden | Example | Why |
 |-----------|---------|-----|
 | Environment files | `.env`, `.env.local`, `.env.prod` | Contains secrets |
-| API tokens | `BOT_TOKEN=8537...` | Bot compromise |
+| API tokens | `BOT_TOKEN=XXXX...` | Bot compromise |
 | Database credentials | `DATABASE_URL=postgres://...` | Data exposure |
 | Salt/pepper values | `HASH_PEPPER=abc123...` | Breaks anonymity |
 | Database files | `*.db`, `*.sqlite`, `*.sqlite3` | Contains user data |
