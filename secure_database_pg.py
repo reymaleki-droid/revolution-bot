@@ -302,6 +302,22 @@ class SecureDatabase:
             ''')
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_submissions_status ON pending_submissions(status)')
             
+            # Placards (printable rally signs) - hosted via Telegram file_id
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS placards (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    country TEXT NOT NULL,
+                    language TEXT NOT NULL,
+                    file_id TEXT NOT NULL,
+                    file_type TEXT DEFAULT 'document',
+                    submitted_by TEXT,
+                    approved_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ''')
+            await conn.execute('CREATE INDEX IF NOT EXISTS idx_placards_country ON placards(country)')
+            await conn.execute('CREATE INDEX IF NOT EXISTS idx_placards_country_lang ON placards(country, language)')
+            
             # Initialize default stats
             default_stats = [
                 ('total_users', '0'),
@@ -942,6 +958,59 @@ class SecureDatabase:
                 UPDATE pending_submissions SET status = $1 WHERE token = $2 AND status = 'pending'
             ''', status, token)
             return result and 'UPDATE 1' in result
+
+    # ==================== PLACARDS ====================
+    
+    async def add_placard(self, title: str, country: str, language: str,
+                         file_id: str, file_type: str = 'document',
+                         submitted_by: str = None) -> int:
+        """Insert an approved placard. Returns the new placard id."""
+        async with self._acquire() as conn:
+            row = await conn.fetchrow('''
+                INSERT INTO placards (title, country, language, file_id, file_type, submitted_by)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING id
+            ''', title, country, language, file_id, file_type, submitted_by)
+            return row['id'] if row else 0
+    
+    async def get_placard_countries(self) -> List[str]:
+        """Return distinct countries that have at least one placard."""
+        async with self._acquire() as conn:
+            rows = await conn.fetch('SELECT DISTINCT country FROM placards ORDER BY country')
+            return [r['country'] for r in rows]
+    
+    async def get_placard_languages(self, country: str) -> List[str]:
+        """Return distinct languages available for a country."""
+        async with self._acquire() as conn:
+            rows = await conn.fetch(
+                'SELECT DISTINCT language FROM placards WHERE country = $1 ORDER BY language',
+                country
+            )
+            return [r['language'] for r in rows]
+    
+    async def get_placards_by_country_and_language(self, country: str, language: str) -> List[Dict]:
+        """Return all placards for a country + language combo."""
+        async with self._acquire() as conn:
+            rows = await conn.fetch('''
+                SELECT id, title, file_id, file_type FROM placards
+                WHERE country = $1 AND language = $2 ORDER BY id DESC
+            ''', country, language)
+            return [dict(r) for r in rows]
+    
+    async def get_placard(self, placard_id: int) -> Optional[Dict]:
+        """Get a single placard by id."""
+        async with self._acquire() as conn:
+            row = await conn.fetchrow(
+                'SELECT id, title, country, language, file_id, file_type FROM placards WHERE id = $1',
+                placard_id
+            )
+            return dict(row) if row else None
+    
+    async def remove_placard(self, placard_id: int) -> bool:
+        """Delete a placard by id. Returns True if deleted."""
+        async with self._acquire() as conn:
+            result = await conn.execute('DELETE FROM placards WHERE id = $1', placard_id)
+            return result and 'DELETE 1' in result
 
     # ==================== RETENTION ====================
     

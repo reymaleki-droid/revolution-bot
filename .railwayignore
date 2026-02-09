@@ -1,0 +1,25 @@
+__pycache__
+.pytest_cache
+legacy
+.github
+.git
+*.md
+*.salt
+logs
+scripts
+pre-commit.sh
+
+# Exclude font variants we don't need
+assets/fonts/vazirmatn/fonts/variable
+assets/fonts/vazirmatn/fonts/webfonts
+assets/fonts/vazirmatn/misc
+assets/fonts/vazirmatn/Round-Dots
+assets/fonts/vazirmatn/*.css
+assets/fonts/vazirmatn/*.txt
+
+# Only keep needed TTF files, exclude rest
+assets/fonts/vazirmatn/fonts/ttf/Vazirmatn-Black.ttf
+assets/fonts/vazirmatn/fonts/ttf/Vazirmatn-ExtraBold.ttf
+assets/fonts/vazirmatn/fonts/ttf/Vazirmatn-ExtraLight.ttf
+assets/fonts/vazirmatn/fonts/ttf/Vazirmatn-SemiBold.ttf
+assets/fonts/vazirmatn/fonts/ttf/Vazirmatn-Thin.ttf

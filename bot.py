@@ -41,6 +41,7 @@ from config import (
     ACTION_LOG_RETENTION_DAYS,
     ADMIN_IDS,
     MEDIA_CHANNEL_ID,
+    LANGUAGE_NAMES,
 )
 
 # Logging configuration
@@ -1157,6 +1158,128 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle document uploads — placard submissions (user + admin)"""
+    user = update.effective_user
+    doc = update.message.document
+
+    if context.user_data.get('awaiting_placard_file'):
+        # User placard submission flow
+        allowed, remaining = await check_media_cooldown(user.id, 'placard_submit')
+        if not allowed:
+            await update.message.reply_text(
+                f"⏰ لطفاً {remaining} دقیقه دیگر صبر کنید.",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data['awaiting_placard_file'] = False
+            return
+
+        await set_media_cooldown(user.id, 'placard_submit')
+
+        title = context.user_data.get('placard_title', 'بدون عنوان')
+        country = context.user_data.get('placard_country', 'Unknown')
+        language = context.user_data.get('placard_language', 'en')
+        file_id = doc.file_id
+        file_type = 'document'
+        reward = POINTS.get('placard_submitted', 20)
+
+        submission_token = secrets.token_hex(8)
+
+        # Store metadata in 'links' field with ||| separator
+        metadata = f"{file_id}|||{file_type}|||{title}|||{country}|||{language}"
+
+        await db.add_submission(
+            token=submission_token,
+            submission_type='placard',
+            user_id=user.id,
+            links=metadata,
+            category='placard',
+            reward=reward
+        )
+
+        # Send to admins
+        lang_label = LANGUAGE_NAMES.get(language, language)
+        verification_msg = (
+            f"🪧 *درخواست ثبت پلاکارد جدید*\n\n"
+            f"📝 عنوان: {title}\n"
+            f"🌍 کشور: {country}\n"
+            f"🗣️ زبان: {lang_label}\n"
+            f"🔐 شناسه ناشناس: `{submission_token}`\n\n"
+            f"⚠️ هویت کاربر محفوظ است"
+        )
+
+        approve_keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ تایید", callback_data=f"approve_placard_{submission_token}"),
+                InlineKeyboardButton("❌ رد", callback_data=f"reject_placard_{submission_token}")
+            ]
+        ])
+
+        for admin_id in ADMIN_IDS:
+            try:
+                # Send the file itself to admin along with the approval message
+                await context.bot.send_document(
+                    admin_id, document=file_id,
+                    caption=f"🪧 پلاکارد: {title}\n🌍 {country} — {lang_label}"
+                )
+                await context.bot.send_message(
+                    admin_id, verification_msg,
+                    parse_mode='Markdown', reply_markup=approve_keyboard
+                )
+            except Exception:
+                pass
+
+        # Clear all placard flow state
+        for key in ['awaiting_placard_file', 'placard_title', 'placard_country', 'placard_language']:
+            context.user_data.pop(key, None)
+
+        await update.message.reply_text(
+            TEXTS['placard_submitted'].format(token=submission_token, points=reward),
+            parse_mode='Markdown',
+            reply_markup=get_main_keyboard()
+        )
+        return
+
+    elif context.user_data.get('awaiting_admin_placard_file'):
+        # Admin direct /addplacard flow — skip approval
+        if user.id not in ADMIN_IDS:
+            context.user_data['awaiting_admin_placard_file'] = False
+            return
+
+        title = context.user_data.get('admin_placard_title', 'بدون عنوان')
+        country = context.user_data.get('admin_placard_country', 'Unknown')
+        language = context.user_data.get('admin_placard_language', 'en')
+        file_id = doc.file_id
+        file_type = 'document'
+
+        placard_id = await db.add_placard(
+            title=title, country=country, language=language,
+            file_id=file_id, file_type=file_type,
+            submitted_by='admin'
+        )
+
+        # Clear admin flow state
+        for key in ['awaiting_admin_placard_file', 'admin_placard_title',
+                     'admin_placard_country', 'admin_placard_language']:
+            context.user_data.pop(key, None)
+
+        lang_label = LANGUAGE_NAMES.get(language, language)
+        await update.message.reply_text(
+            f"✅ پلاکارد اضافه شد!\n\n"
+            f"📋 شناسه: {placard_id}\n"
+            f"📝 عنوان: {title}\n"
+            f"🌍 {country} — {lang_label}",
+            reply_markup=get_main_keyboard()
+        )
+        return
+
+    else:
+        await update.message.reply_text(
+            "فایل دریافت شد! برای ارسال پلاکارد، از بخش تجمعات استفاده کنید.",
+            reply_markup=get_main_keyboard()
+        )
+
+
 async def handle_protests_button(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE):
@@ -1166,6 +1289,7 @@ async def handle_protests_button(
         [InlineKeyboardButton("🌹 تقدیم گل به پلیس و مردم", callback_data="protests_flowers")],
         [InlineKeyboardButton("🧹 پاکسازی پس از تجمعات", callback_data="protests_cleanup")],
         [InlineKeyboardButton("📸 اشتراک‌گذاری رسانه", callback_data="protests_media")],
+        [InlineKeyboardButton("🪧 پلاکاردهای قابل چاپ", callback_data="protests_placards")],
         [InlineKeyboardButton("📋 راهنمای تجمعات", callback_data="protests_guidelines")],
         [InlineKeyboardButton("👥 هماهنگ‌کنندگان محلی", callback_data="protests_organizers")],
         [InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]
@@ -1193,14 +1317,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'video_viral', 'conduit_manual_select', 'back_to_email_menu',
         'protests_calendar', 'protest_create_new', 'protests_cleanup',
         'protests_media', 'protests_guidelines', 'protests_organizers',
-        'protests_flowers', 'protests_menu', 'back_to_profile', 'my_certificates', 'my_rank_card',
+        'protests_flowers', 'protests_menu', 'protests_placards',
+        'placard_browse', 'placard_submit_start',
+        'back_to_profile', 'my_certificates', 'my_rank_card',
         'my_achievements'
     }
     VALID_PREFIXES = (
         'video_', 'email_sent_', 'conduit_confirm_', 'conduit_tier_',
         'protest_country_', 'protest_event_', 'protest_attend_', 'protest_org_',
         'protest_feb14_',
-        'approve_video_', 'reject_video_', 'approve_gathering_', 'reject_gathering_'
+        'placard_country_', 'placard_lang_', 'placard_file_',
+        'placard_submit_country_', 'placard_submit_lang_',
+        'admin_placard_country_', 'admin_placard_lang_',
+        'approve_video_', 'reject_video_', 'approve_gathering_', 'reject_gathering_',
+        'approve_placard_', 'reject_placard_'
     )
     
     if data not in VALID_CALLBACKS and not any(data.startswith(p) for p in VALID_PREFIXES):
@@ -1224,6 +1354,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith('reject_gathering_'):
         token = data[len('reject_gathering_'):]
         await _handle_reject_gathering_callback(query, context, token)
+        return
+    elif data.startswith('approve_placard_'):
+        token = data[len('approve_placard_'):]
+        await _handle_approve_placard_callback(query, context, token)
+        return
+    elif data.startswith('reject_placard_'):
+        token = data[len('reject_placard_'):]
+        await _handle_reject_placard_callback(query, context, token)
         return
 
     if data == "main_menu":
@@ -1917,6 +2055,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🌹 تقدیم گل به پلیس و مردم", callback_data="protests_flowers")],
             [InlineKeyboardButton("🧹 پاکسازی پس از تجمعات", callback_data="protests_cleanup")],
             [InlineKeyboardButton("📸 اشتراک‌گذاری رسانه", callback_data="protests_media")],
+            [InlineKeyboardButton("🪧 پلاکاردهای قابل چاپ", callback_data="protests_placards")],
             [InlineKeyboardButton("📋 راهنمای تجمعات", callback_data="protests_guidelines")],
             [InlineKeyboardButton("👥 هماهنگ‌کنندگان محلی", callback_data="protests_organizers")],
             [InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]
@@ -1927,6 +2066,203 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             TEXTS['protests_intro'],
             parse_mode='Markdown',
             reply_markup=reply_markup
+        )
+
+    # ==================== PLACARDS ====================
+
+    elif data == "protests_placards":
+        keyboard = [
+            [InlineKeyboardButton("📂 مرور پلاکاردها", callback_data="placard_browse")],
+            [InlineKeyboardButton("➕ ارسال طرح جدید", callback_data="placard_submit_start")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="protests_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            TEXTS['placards_intro'],
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+    elif data == "placard_browse":
+        # Show countries that have placards
+        countries = await db.get_placard_countries()
+        if not countries:
+            # Fall back to default country list
+            countries = ["USA", "UK", "Germany", "France", "Canada", "Sweden", "Netherlands", "Austria"]
+        keyboard = []
+        for country in countries:
+            keyboard.append([InlineKeyboardButton(
+                f"🌍 {country}", callback_data=f"placard_country_{country}")])
+        keyboard.append([InlineKeyboardButton(
+            "🔙 بازگشت", callback_data="protests_placards")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            TEXTS['placards_select_country'],
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+    elif data.startswith("placard_country_"):
+        country = data.replace("placard_country_", "")
+        languages = await db.get_placard_languages(country)
+        if not languages:
+            keyboard = [
+                [InlineKeyboardButton("🔙 بازگشت", callback_data="placard_browse")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                TEXTS['no_placards'],
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+        else:
+            keyboard = []
+            for lang in languages:
+                label = LANGUAGE_NAMES.get(lang, lang)
+                keyboard.append([InlineKeyboardButton(
+                    label, callback_data=f"placard_lang_{country}_{lang}")])
+            keyboard.append([InlineKeyboardButton(
+                "🔙 بازگشت", callback_data="placard_browse")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                TEXTS['placards_select_language'],
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+
+    elif data.startswith("placard_lang_"):
+        parts = data.replace("placard_lang_", "").rsplit("_", 1)
+        if len(parts) == 2:
+            country, lang = parts
+        else:
+            await query.answer("خطا", show_alert=True)
+            return
+        placards = await db.get_placards_by_country_and_language(country, lang)
+        if not placards:
+            keyboard = [
+                [InlineKeyboardButton("🔙 بازگشت", callback_data=f"placard_country_{country}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                TEXTS['no_placards'],
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+        else:
+            lang_label = LANGUAGE_NAMES.get(lang, lang)
+            keyboard = []
+            for p in placards:
+                keyboard.append([InlineKeyboardButton(
+                    f"🪧 {p['title']}", callback_data=f"placard_file_{p['id']}")])
+            keyboard.append([InlineKeyboardButton(
+                "🔙 بازگشت", callback_data=f"placard_country_{country}")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                f"🪧 *پلاکاردهای {country} — {lang_label}*\n\n"
+                f"برای دانلود، روی هر کدام کلیک کنید:",
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+
+    elif data.startswith("placard_file_"):
+        try:
+            placard_id = int(data.replace("placard_file_", ""))
+        except (ValueError, TypeError):
+            await query.answer("خطا: شناسه نامعتبر", show_alert=True)
+            return
+        placard = await db.get_placard(placard_id)
+        if not placard:
+            await query.answer("❌ پلاکارد یافت نشد", show_alert=True)
+            return
+        # Send file to user
+        try:
+            if placard['file_type'] == 'photo':
+                await query.message.reply_photo(
+                    photo=placard['file_id'],
+                    caption=f"🪧 {placard['title']}\n🌍 {placard['country']} — {LANGUAGE_NAMES.get(placard['language'], placard['language'])}"
+                )
+            else:
+                await query.message.reply_document(
+                    document=placard['file_id'],
+                    caption=f"🪧 {placard['title']}\n🌍 {placard['country']} — {LANGUAGE_NAMES.get(placard['language'], placard['language'])}"
+                )
+            await query.answer("✅ فایل ارسال شد")
+        except Exception as e:
+            logger.error(f"Error sending placard file: {e}")
+            await query.answer("❌ خطا در ارسال فایل", show_alert=True)
+
+    # Placard submission flow
+    elif data == "placard_submit_start":
+        countries = ["USA", "UK", "Germany", "France", "Canada", "Sweden", "Netherlands", "Austria"]
+        keyboard = []
+        for country in countries:
+            keyboard.append([InlineKeyboardButton(
+                f"🌍 {country}", callback_data=f"placard_submit_country_{country}")])
+        keyboard.append([InlineKeyboardButton(
+            "🔙 بازگشت", callback_data="protests_placards")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            TEXTS['placard_submit_intro'],
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+    elif data.startswith("placard_submit_country_"):
+        country = data.replace("placard_submit_country_", "")
+        context.user_data['placard_country'] = country
+        keyboard = []
+        for code, label in LANGUAGE_NAMES.items():
+            keyboard.append([InlineKeyboardButton(
+                label, callback_data=f"placard_submit_lang_{code}")])
+        keyboard.append([InlineKeyboardButton(
+            "🔙 بازگشت", callback_data="placard_submit_start")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            TEXTS['placards_select_language'],
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+    elif data.startswith("placard_submit_lang_"):
+        lang = data.replace("placard_submit_lang_", "")
+        context.user_data['placard_language'] = lang
+        context.user_data['awaiting_placard_title'] = True
+        await query.edit_message_text(
+            TEXTS['placard_submit_title'],
+            parse_mode='Markdown'
+        )
+
+    # Admin /addplacard interactive callbacks
+    elif data.startswith("admin_placard_country_"):
+        if user.id not in ADMIN_IDS:
+            await query.answer("⛔ فقط مدیران", show_alert=True)
+            return
+        country = data.replace("admin_placard_country_", "")
+        context.user_data['admin_placard_country'] = country
+        keyboard = []
+        for code, label in LANGUAGE_NAMES.items():
+            keyboard.append([InlineKeyboardButton(
+                label, callback_data=f"admin_placard_lang_{code}")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            f"🪧 کشور: *{country}*\n\nزبان را انتخاب کنید:",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+    elif data.startswith("admin_placard_lang_"):
+        if user.id not in ADMIN_IDS:
+            await query.answer("⛔ فقط مدیران", show_alert=True)
+            return
+        lang = data.replace("admin_placard_lang_", "")
+        context.user_data['admin_placard_language'] = lang
+        context.user_data['awaiting_admin_placard_title'] = True
+        lang_label = LANGUAGE_NAMES.get(lang, lang)
+        await query.edit_message_text(
+            f"🪧 کشور: *{context.user_data.get('admin_placard_country', '')}*\n"
+            f"🗣️ زبان: *{lang_label}*\n\n"
+            f"لطفاً عنوان پلاکارد را تایپ کنید:",
+            parse_mode='Markdown'
         )
 
     elif data == "back_to_profile":
@@ -2275,6 +2611,29 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• https://t.me/channelname/123",
                 reply_markup=get_main_keyboard()
             )
+
+    elif context.user_data.get('awaiting_placard_title'):
+        # Handle placard title input (user submission flow)
+        title = text.strip()[:100]  # Cap at 100 chars
+        context.user_data['placard_title'] = title
+        context.user_data['awaiting_placard_title'] = False
+        context.user_data['awaiting_placard_file'] = True
+        await update.message.reply_text(
+            TEXTS['placard_submit_file'],
+            parse_mode='Markdown',
+            reply_markup=get_main_keyboard()
+        )
+
+    elif context.user_data.get('awaiting_admin_placard_title'):
+        # Handle admin /addplacard title input
+        title = text.strip()[:100]
+        context.user_data['admin_placard_title'] = title
+        context.user_data['awaiting_admin_placard_title'] = False
+        context.user_data['awaiting_admin_placard_file'] = True
+        await update.message.reply_text(
+            "📎 حالا فایل پلاکارد را ارسال کنید (هر فرمتی):",
+            reply_markup=get_main_keyboard()
+        )
 
     else:
         await update.message.reply_text(
@@ -2656,6 +3015,113 @@ async def _handle_reject_gathering_callback(query, context, submission_token):
         await query.answer("❌ خطایی رخ داد", show_alert=True)
 
 
+async def _handle_approve_placard_callback(query, context, submission_token):
+    """Handle inline button callback for approving placard submission"""
+    user_id = query.from_user.id
+    if user_id not in ADMIN_IDS:
+        await query.answer("⛔ فقط مدیران", show_alert=True)
+        return
+
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'placard':
+        await query.edit_message_text("❌ شناسه نامعتبر یا قبلاً پردازش شده است.")
+        return
+
+    requester_id = submission['user_id']
+    reward = submission['reward']
+    # Parse metadata from links field: "file_id|||file_type|||title|||country|||language"
+    parts = submission['links'].split('|||')
+    if len(parts) != 5:
+        await query.edit_message_text("❌ داده پلاکارد نامعتبر است.")
+        return
+    file_id, file_type, title, country, language = parts
+
+    try:
+        # Insert into placards table
+        placard_id = await db.add_placard(
+            title=title, country=country, language=language,
+            file_id=file_id, file_type=file_type,
+            submitted_by=str(requester_id)
+        )
+
+        # Award points
+        cert_data = await db.add_points(requester_id, reward, 'placard_submitted')
+        stats = await db.get_user_stats(requester_id)
+        new_score = stats['imtiaz']
+        new_role = stats['role']
+
+        await context.bot.send_message(
+            requester_id,
+            f"✅ *طرح پلاکارد شما تایید شد!*\n\n"
+            f"🪧 عنوان: {title}\n"
+            f"🌍 کشور: {country}\n"
+            f"🎉 پاداش: *{reward} امتیاز*\n\n"
+            f"💎 امتیاز کل: {new_score:,}\n"
+            f"🎖️ درجه: {new_role}\n\n"
+            f"طرح شما اکنون در بخش پلاکاردها در دسترس همه است! 🦁☀️",
+            parse_mode='Markdown'
+        )
+
+        await db.resolve_submission(submission_token, 'approved')
+
+        await query.edit_message_text(
+            f"✅ پلاکارد «{title}» با شناسه `{submission_token}` تایید شد.\n\n"
+            f"🌍 {country} — {LANGUAGE_NAMES.get(language, language)}\n"
+            f"💰 {reward} امتیاز به کاربر ناشناس اضافه شد.\n"
+            f"📋 شناسه پلاکارد: {placard_id}",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Admin approved placard {submission_token} -> placard_id={placard_id}")
+
+    except Exception as e:
+        logger.error(f"Error approving placard via callback: {e}", exc_info=True)
+        await query.answer("❌ خطایی رخ داد", show_alert=True)
+
+
+async def _handle_reject_placard_callback(query, context, submission_token):
+    """Handle inline button callback for rejecting placard submission"""
+    user_id = query.from_user.id
+    if user_id not in ADMIN_IDS:
+        await query.answer("⛔ فقط مدیران", show_alert=True)
+        return
+
+    submission = await db.get_submission(submission_token)
+    if not submission or submission['submission_type'] != 'placard':
+        await query.edit_message_text("❌ شناسه نامعتبر یا قبلاً پردازش شده است.")
+        return
+
+    requester_id = submission['user_id']
+    parts = submission['links'].split('|||')
+    title = parts[2] if len(parts) >= 3 else "نامشخص"
+
+    try:
+        await context.bot.send_message(
+            requester_id,
+            f"❌ *طرح پلاکارد رد شد*\n\n"
+            f"🪧 عنوان: {title}\n\n"
+            "متأسفانه طرح ارسالی شما تایید نشد.\n"
+            "لطفاً مطمئن شوید که:\n"
+            "• طرح با کیفیت و قابل چاپ است\n"
+            "• محتوا مناسب و در راستای انقلاب ملی است\n"
+            "• خشونت‌آمیز نیست\n\n"
+            "می‌توانید دوباره تلاش کنید.",
+            parse_mode='Markdown'
+        )
+
+        await db.resolve_submission(submission_token, 'rejected')
+
+        await query.edit_message_text(
+            f"❌ پلاکارد «{title}» با شناسه `{submission_token}` رد شد.\n\n"
+            f"کاربر ناشناس به او اطلاع داده شد.",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Admin rejected placard {submission_token}")
+
+    except Exception as e:
+        logger.error(f"Error rejecting placard via callback: {e}", exc_info=True)
+        await query.answer("❌ خطایی رخ داد", show_alert=True)
+
+
 async def approve_video_command(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE):
@@ -2881,6 +3347,29 @@ async def reject_gathering_command(
     except Exception as e:
         logger.error(f"Error rejecting gathering: {e}", exc_info=True)
         await update.message.reply_text("❌ خطایی رخ داد. لطفاً دوباره تلاش کنید.")
+
+
+async def add_placard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to directly add a placard (bypasses approval flow).
+    Usage: /addplacard  — starts interactive flow (country → language → title → file)
+    """
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ این دستور فقط برای مدیران است.")
+        return
+
+    countries = ["USA", "UK", "Germany", "France", "Canada", "Sweden", "Netherlands", "Austria"]
+    keyboard = []
+    for country in countries:
+        keyboard.append([InlineKeyboardButton(
+            f"🌍 {country}", callback_data=f"admin_placard_country_{country}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "🪧 *افزودن پلاکارد جدید (مستقیم)*\n\nکشور را انتخاب کنید:",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
 
 
 async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3154,6 +3643,10 @@ def main():
         CommandHandler(
             "rejectgathering",
             reject_gathering_command))
+    application.add_handler(
+        CommandHandler(
+            "addplacard",
+            add_placard_command))
 
     # User privacy commands
     application.add_handler(
@@ -3185,6 +3678,7 @@ def main():
             handle_text))
     application.add_handler(MessageHandler(filters.VIDEO, handle_video))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
     # Error handler
     application.add_error_handler(error_handler)
