@@ -14,7 +14,7 @@ psycopg[binary]==3.3.2
 
 # OCR for Conduit verification (optional)
 pytesseract==0.3.13
-Pillow==11.1.0
+Pillow==12.1.0
 
 # RTL text shaping for Persian
 arabic-reshaper==3.0.0
