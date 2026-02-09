@@ -3,7 +3,7 @@ Secure Database Module for Zero-Knowledge Architecture (PostgreSQL)
 
 Security guarantees:
 - User IDs are HMAC-SHA256 hashed with pepper + salt (irreversible)
-- No PII stored: no usernames, no file_ids, no raw text
+- No PII stored: no usernames, no raw text (placard file_ids stored for approved content only)
 - Parameterized queries only (no SQL injection)
 - Connection pooling for async safety
 - Fail-closed on connection errors
