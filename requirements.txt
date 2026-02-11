@@ -24,7 +24,7 @@ python-bidi==0.6.6
 qrcode[pil]==7.4.2
 
 # Security
-cryptography==46.0.4
+cryptography==46.0.5
 python-dotenv==1.2.1
 
 # Utilities
