@@ -18,13 +18,13 @@ Pillow==11.1.0
 
 # RTL text shaping for Persian
 arabic-reshaper==3.0.0
-python-bidi==0.6.6
+python-bidi==0.6.7
 
 # QR Code generation for certificates
 qrcode[pil]==7.4.2
 
 # Security
-cryptography==46.0.4
+cryptography==46.0.5
 python-dotenv==1.2.1
 
 # Utilities
